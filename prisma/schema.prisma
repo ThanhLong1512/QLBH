@@ -1,0 +1,132 @@
+// Prisma schema for PetroLub CRM / DMS (Distribution Management System)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SALES_REP
+  WAREHOUSE_STAFF
+  FLEET_DRIVER
+  DISTRIBUTOR
+}
+
+enum OrderSyncStatus {
+  PENDING
+  SYNCING
+  SYNCED
+  FAILED
+}
+
+enum OrderStatus {
+  DRAFT
+  CONFIRMED
+  PACKING
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  CREDIT_TERMS
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  fullName      String
+  phone         String?
+  role          Role      @default(SALES_REP)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orders        Order[]   @relation("SalesOrders")
+  assignedFleet Order[]   @relation("DriverDispatches")
+
+  @@map("users")
+}
+
+model Product {
+  id              String      @id @default(uuid())
+  sku             String      @unique
+  name            String
+  brand           String      @default("PetroLub")
+  category        String      // e.g., "Engine Oil", "Hydraulic Fluid", "Gear Oil"
+  viscosity       String      // e.g., "15W-40", "5W-30", "ISO VG 68", "80W-90"
+  volume          String      // e.g., "1L", "4L", "18L Pail", "200L Drum", "IBC 1000L"
+  standards       String?     // e.g., "API CK-4, ACEA E9"
+  description     String?
+  unitPrice       Decimal     @db.Decimal(12, 2)
+  stockQuantity   Int         @default(0)
+  reorderLevel    Int         @default(20)
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  orderItems      OrderItem[]
+
+  @@index([viscosity])
+  @@index([category])
+  @@map("products")
+}
+
+model Order {
+  id              String          @id @default(uuid())
+  // Client order ID generated on mobile/tablet during offline field sales
+  clientOrderId   String?         @unique
+  orderNumber     String          @unique @default(cuid())
+  customerName    String
+  customerPhone   String?
+  deliveryAddress String?
+  
+  // Offline sync metadata
+  syncStatus      OrderSyncStatus @default(SYNCED)
+  lastSyncedAt    DateTime?
+  offlineCreatedAt DateTime?
+
+  // Workflow status
+  status          OrderStatus     @default(CONFIRMED)
+  paymentStatus   PaymentStatus   @default(UNPAID)
+  totalAmount     Decimal         @db.Decimal(14, 2)
+  notes           String?
+
+  // Relations
+  salesRepId      String?
+  salesRep        User?           @relation("SalesOrders", fields: [salesRepId], references: [id])
+
+  driverId        String?
+  driver          User?           @relation("DriverDispatches", fields: [driverId], references: [id])
+
+  items           OrderItem[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([syncStatus])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  subtotal    Decimal  @db.Decimal(12, 2)
+
+  @@map("order_items")
+}
