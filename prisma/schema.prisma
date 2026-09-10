@@ -1,132 +1,437 @@
-// Prisma schema for PetroLub CRM / DMS (Distribution Management System)
+// Prisma schema for NEXUS Retail & Distribution ERP (Presisted to PostgreSQL / Supabase)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-enum Role {
-  ADMIN
-  SALES_REP
-  WAREHOUSE_STAFF
-  FLEET_DRIVER
-  DISTRIBUTOR
-}
-
-enum OrderSyncStatus {
-  PENDING
-  SYNCING
-  SYNCED
-  FAILED
-}
-
-enum OrderStatus {
-  DRAFT
-  CONFIRMED
-  PACKING
-  DISPATCHED
-  DELIVERED
-  CANCELLED
-}
-
-enum PaymentStatus {
-  UNPAID
-  PARTIAL
-  PAID
-  CREDIT_TERMS
-}
-
-model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  fullName      String
-  phone         String?
-  role          Role      @default(SALES_REP)
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  orders        Order[]   @relation("SalesOrders")
-  assignedFleet Order[]   @relation("DriverDispatches")
-
-  @@map("users")
-}
+// ---------------------------------------------------------
+// 1. SẢN PHẨM & ĐƠN VỊ ĐÓNG GÓI (Products & Packaging Units)
+// ---------------------------------------------------------
 
 model Product {
-  id              String      @id @default(uuid())
-  sku             String      @unique
-  name            String
-  brand           String      @default("PetroLub")
-  category        String      // e.g., "Engine Oil", "Hydraulic Fluid", "Gear Oil"
-  viscosity       String      // e.g., "15W-40", "5W-30", "ISO VG 68", "80W-90"
-  volume          String      // e.g., "1L", "4L", "18L Pail", "200L Drum", "IBC 1000L"
-  standards       String?     // e.g., "API CK-4, ACEA E9"
-  description     String?
-  unitPrice       Decimal     @db.Decimal(12, 2)
-  stockQuantity   Int         @default(0)
-  reorderLevel    Int         @default(20)
-  isActive        Boolean     @default(true)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-
-  orderItems      OrderItem[]
-
-  @@index([viscosity])
-  @@index([category])
-  @@map("products")
-}
-
-model Order {
   id              String          @id @default(uuid())
-  // Client order ID generated on mobile/tablet during offline field sales
-  clientOrderId   String?         @unique
-  orderNumber     String          @unique @default(cuid())
-  customerName    String
-  customerPhone   String?
-  deliveryAddress String?
-  
-  // Offline sync metadata
-  syncStatus      OrderSyncStatus @default(SYNCED)
-  lastSyncedAt    DateTime?
-  offlineCreatedAt DateTime?
-
-  // Workflow status
-  status          OrderStatus     @default(CONFIRMED)
-  paymentStatus   PaymentStatus   @default(UNPAID)
-  totalAmount     Decimal         @db.Decimal(14, 2)
-  notes           String?
-
-  // Relations
-  salesRepId      String?
-  salesRep        User?           @relation("SalesOrders", fields: [salesRepId], references: [id])
-
-  driverId        String?
-  driver          User?           @relation("DriverDispatches", fields: [driverId], references: [id])
-
-  items           OrderItem[]
+  sku             String          @unique
+  name            String
+  category        String          // "Điện Máy", "Gia Dụng", "Hóa Mỹ Phẩm", "Dầu Nhờn & Phụ Gia", ...
+  baseUnit        String          // "Cái", "Can", "Thùng", "Hộp", "Bao"
+  costPrice       Float           @default(0) // Giá vốn
+  priceRetail     Float           @default(0) // Giá bán lẻ base unit
+  priceWholesale  Float           @default(0) // Giá bán buôn/sỉ
+  priceVip        Float           @default(0) // Giá đại lý VIP
+  stockBaseUnits  Int             @default(0) // Tồn kho quy về base unit
+  minStockAlert   Int             @default(10)
+  hasSerial       Boolean         @default(false)
+  hasExpiry       Boolean         @default(false)
+  barcode         String          @default("")
+  imageUrl        String?
+  isActive        Boolean         @default(true)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  @@index([syncStatus])
+  units           PackagingUnit[]
+  batches         ProductBatch[]
+  serials         SerialItem[]
+  orderItems      OrderItem[]
+  warrantyTickets WarrantyTicket[]
+
+  @@index([category])
+  @@index([barcode])
+  @@map("products")
+}
+
+model PackagingUnit {
+  id              String   @id @default(uuid())
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name            String   // "Thùng", "Hộp", "Can", "Cái"
+  conversionRate  Int      @default(1) // Quy đổi ra base unit
+  isBase          Boolean  @default(false)
+  priceRetail     Float    @default(0)
+  priceWholesale  Float    @default(0)
+  priceVip        Float    @default(0)
+
+  @@index([productId])
+  @@map("packaging_units")
+}
+
+model ProductBatch {
+  id                String    @id @default(uuid())
+  batchId           String    // e.g. "LOT-2026-001"
+  sku               String
+  productId         String?
+  product           Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productionDate    String
+  expiryDate        String
+  quantityBaseUnits Int       @default(0)
+  warehouseLocation String    @default("Kho Tổng")
+  daysRemaining     Int       @default(365)
+  createdAt         DateTime  @default(now())
+
+  @@index([sku])
+  @@map("product_batches")
+}
+
+// ---------------------------------------------------------
+// 2. SERIAL & BẢO HÀNH (Serials & Warranty)
+// ---------------------------------------------------------
+
+model SerialItem {
+  id            String    @id @default(uuid())
+  serialNumber  String    @unique
+  sku           String
+  productId     String?
+  product       Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName   String
+  importDate    String
+  supplier      String
+  orderCode     String?
+  customerName  String?
+  customerPhone String?
+  warrantyUntil String
+  status        String    @default("in_stock") // "in_stock", "sold", "rma", "defective", "returned"
+  notes         String?
+  batchNumber   String?
+  timeline      Json?     // Array of SerialTimelineEvent
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([sku])
+  @@index([status])
+  @@map("serial_items")
+}
+
+model WarrantyTicket {
+  id                  String   @id @default(uuid())
+  code                String   @unique // e.g. "PBH-20260910-001"
+  customerName        String
+  customerPhone       String
+  customerId          String?
+  productId           String?
+  product             Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName         String
+  sku                 String
+  serialNumber        String?
+  orderCode           String?
+  receivedDate        String
+  estimatedReturnDate String?
+  returnedDate        String?
+  status              String   @default("receiving") // "receiving", "inspecting", "repairing", "completed", "returned_to_customer"
+  issueDescription    String
+  accessoriesAttached String?
+  technicianName      String
+  isUnderWarranty     Boolean  @default(true)
+  warrantyExpiryDate  String?
+  repairCost          Float    @default(0)
+  sparePartsCost      Float    @default(0)
+  totalCost           Float    @default(0)
+  serviceRecords      Json?    // Array of WarrantyServiceRecord
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([customerPhone])
+  @@index([status])
+  @@map("warranty_tickets")
+}
+
+// ---------------------------------------------------------
+// 3. ĐỐI TÁC: KHÁCH HÀNG & NHÀ CUNG CẤP (Partners)
+// ---------------------------------------------------------
+
+model Customer {
+  id                String   @id @default(uuid())
+  code              String   @unique // e.g. "KH-001"
+  name              String
+  phone             String
+  address           String   @default("")
+  tier              String   @default("bac") // "dong", "bac", "vang", "kim_cuong"
+  creditLimit       Float    @default(20000000) // Hạn mức nợ (VND)
+  currentDebt       Float    @default(0) // Dư nợ hiện tại
+  taxId             String?
+  paymentTermDays   Int      @default(30)
+  historicalRevenue Float    @default(0)
+  
+  // Tuổi nợ (Debt Aging)
+  debtWithin30      Float    @default(0)
+  debtDays31to60    Float    @default(0)
+  debtDays61to90    Float    @default(0)
+  debtOver90        Float    @default(0)
+
+  orders            Order[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([phone])
+  @@index([tier])
+  @@map("customers")
+}
+
+model Supplier {
+  id                String   @id @default(uuid())
+  code              String   @unique // e.g. "NCC-001"
+  name              String
+  contactPerson     String   @default("")
+  phone             String   @default("")
+  email             String   @default("")
+  address           String   @default("")
+  taxId             String   @default("")
+  category          String   @default("Dầu Nhờn & Phụ Gia")
+  currentDebt       Float    @default(0) // Nợ phải trả NCC
+  paymentTermsDays  Int      @default(30)
+  totalPurchased    Float    @default(0)
+  bankName          String?
+  bankAccount       String?
+  bankAccountName   String?
+  status            String   @default("active") // "active", "inactive"
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("suppliers")
+}
+
+// ---------------------------------------------------------
+// 4. NHÂN SỰ & PHÂN QUYỀN (Staff / Employees)
+// ---------------------------------------------------------
+
+model Employee {
+  id                    String   @id @default(uuid())
+  code                  String   @unique // e.g. "NV-001"
+  name                  String
+  phone                 String   @default("")
+  email                 String   @default("")
+  role                  String   @default("cashier") // "admin", "manager", "cashier", "warehouse", "accountant"
+  roleTitle             String   @default("Nhân Viên")
+  branch                String   @default("Kho Tổng")
+  status                String   @default("active") // "active", "inactive"
+  hireDate              String   @default("")
+  baseSalary            Float    @default(0)
+  commissionRate        Float    @default(0)
+  totalOrdersHandled    Int      @default(0)
+  totalRevenueGenerated Float    @default(0)
+  notes                 String?
+  avatar                String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("employees")
+}
+
+// ---------------------------------------------------------
+// 5. ĐƠN HÀNG & CHI TIẾT ĐƠN (Orders & Order Items)
+// ---------------------------------------------------------
+
+model Order {
+  id              String      @id @default(uuid())
+  code            String      @unique // e.g. "DH-20260910-001"
+  customerId      String?
+  customer        Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName    String
+  customerPhone   String
+  subtotal        Float       @default(0)
+  discountAmount  Float       @default(0)
+  shippingFee     Float       @default(0)
+  totalAmount     Float       @default(0)
+  paidAmount      Float       @default(0)
+  debtAmount      Float       @default(0)
+  paymentMethod   String      @default("cash") // "cash", "vietqr", "debt", "mixed"
+  status          String      @default("completed") // "completed", "shipping", "pending_approval", "cancelled"
+  cashierName     String      @default("Thu Ngân")
+  notes           String?
+  hasPinOverride  Boolean     @default(false)
+  vatRate         Float?      @default(0)
+  vatAmount       Float?      @default(0)
+  salesChannel    String      @default("pos") // "pos", "b2b", "online"
+  invoiceNumber   String?
+  customerTaxId   String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  items           OrderItem[]
+
+  @@index([code])
+  @@index([customerId])
   @@index([status])
   @@map("orders")
 }
 
 model OrderItem {
-  id          String   @id @default(uuid())
-  orderId     String
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id                String   @id @default(uuid())
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId         String?
+  product           Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sku               String
+  name              String
+  category          String   @default("")
+  selectedUnit      String   // "Thùng", "Hộp", "Can", "Cái"
+  conversionRate    Int      @default(1)
+  quantity          Int      @default(1)
+  unitPrice         Float    @default(0)
+  costPricePerUnit  Float    @default(0)
+  totalPrice        Float    @default(0)
+  discountPercent   Float    @default(0)
+  serialNumbers     Json?    // Array of strings
+  batchId           String?
 
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id])
-
-  quantity    Int
-  unitPrice   Decimal  @db.Decimal(12, 2)
-  subtotal    Decimal  @db.Decimal(12, 2)
-
+  @@index([orderId])
   @@map("order_items")
+}
+
+// ---------------------------------------------------------
+// 6. CA LÀM VIỆC & SỔ QUỸ (Shifts & Cashflow)
+// ---------------------------------------------------------
+
+model CashShift {
+  id              String    @id @default(uuid())
+  cashierName     String
+  startedAt       String
+  closedAt        String?
+  openingCash     Float     @default(0)
+  cashSales       Float     @default(0)
+  vietQrSales     Float     @default(0)
+  debtSales       Float     @default(0)
+  cashDrops       Float     @default(0)
+  expectedCash    Float     @default(0)
+  actualCash      Float?
+  variance        Float?
+  varianceReason  String?
+  isClosed        Boolean   @default(false)
+  managerSignOff  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  transactions    CashTransaction[]
+
+  @@map("cash_shifts")
+}
+
+model CashTransaction {
+  id            String     @id @default(uuid())
+  code          String     @unique // e.g. "PT-001", "PC-001"
+  type          String     // "thu" hoặc "chi"
+  category      String     // "Bán hàng", "Thu nợ", "Nhập hàng", "Chi phí điện nước"...
+  amount        Float      @default(0)
+  date          String
+  person        String     @default("")
+  description   String     @default("")
+  shiftId       String?
+  shift         CashShift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  fundType      String     @default("cash") // "cash", "bank"
+  partnerType   String?    // "customer", "supplier", "employee", "other"
+  partnerId     String?
+  partnerName   String?
+  referenceCode String?    // Mã đơn hàng, phiếu nhập...
+  paymentMethod String     @default("cash") // "cash", "vietqr", "bank_transfer"
+  createdAt     DateTime   @default(now())
+
+  @@index([type])
+  @@index([date])
+  @@map("cash_transactions")
+}
+
+// ---------------------------------------------------------
+// 7. PHÊ DUYỆT TÍN DỤNG (Credit Approvals)
+// ---------------------------------------------------------
+
+model CreditApprovalRequest {
+  id            String   @id @default(uuid())
+  orderCode     String
+  customerId    String
+  customerName  String
+  customerPhone String
+  orderTotal    Float    @default(0)
+  currentDebt   Float    @default(0)
+  creditLimit   Float    @default(0)
+  excessAmount  Float    @default(0)
+  requestedAt   String
+  requestedBy   String
+  reason        String   @default("")
+  status        String   @default("pending") // "pending", "approved", "rejected"
+  resolvedAt    String?
+  resolvedBy    String?
+  messages      Json?    // Array of chat messages
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("credit_approval_requests")
+}
+
+// ---------------------------------------------------------
+// 8. XUẤT NHẬP KHO & ĐỔI TRẢ (Inbound/Outbound & Returns)
+// ---------------------------------------------------------
+
+model StockInboundReceipt {
+  id            String   @id @default(uuid())
+  code          String   @unique // e.g. "PNK-20260910-001"
+  date          String
+  supplierId    String
+  supplierName  String
+  creatorName   String
+  totalCost     Float    @default(0)
+  paidAmount    Float    @default(0)
+  debtAmount    Float    @default(0)
+  paymentMethod String   @default("bank_transfer")
+  notes         String?
+  status        String   @default("completed") // "completed", "draft"
+  items         Json     // Array of StockInboundItem
+  createdAt     DateTime @default(now())
+
+  @@map("stock_inbound_receipts")
+}
+
+model StockOutboundReceipt {
+  id          String   @id @default(uuid())
+  code        String   @unique // e.g. "PXK-20260910-001"
+  date        String
+  reason      String   // "damaged", "internal_use", "loss", "transfer", "other"
+  reasonLabel String
+  creatorName String
+  destination String?
+  totalCost   Float    @default(0)
+  notes       String?
+  status      String   @default("completed")
+  items       Json     // Array of StockOutboundItem
+  createdAt   DateTime @default(now())
+
+  @@map("stock_outbound_receipts")
+}
+
+model ReturnReceipt {
+  id                String   @id @default(uuid())
+  code              String   @unique // e.g. "PTH-20260910-001"
+  type              String   // "customer_return", "supplier_return"
+  date              String
+  referenceOrderCode String?
+  partnerId         String
+  partnerName       String
+  partnerPhone      String?
+  creatorName       String
+  totalRefundAmount Float    @default(0)
+  refundMethod      String   @default("cash")
+  status            String   @default("completed")
+  notes             String?
+  items             Json     // Array of ReturnItem
+  createdAt         DateTime @default(now())
+
+  @@map("return_receipts")
+}
+
+// ---------------------------------------------------------
+// 9. CẤU HÌNH HỆ THỐNG (System Settings)
+// ---------------------------------------------------------
+
+model SystemSetting {
+  id          String   @id @default("default")
+  key         String   @unique
+  value       Json
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
 }

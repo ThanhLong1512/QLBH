@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Montserrat, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const montserrat = Montserrat({
+  variable: "--font-sans",
+  subsets: ["latin", "vietnamese"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono",
+  subsets: ["latin", "vietnamese"],
 });
 
 export const metadata: Metadata = {
-  title: "PetroLub CRM/DMS - Lubricant Oil Distribution Management System",
-  description: "Enterprise CRM and Distribution Management System (DMS) for industrial & automotive lubricants.",
+  title: "NEXUS ERP - Hệ Thống Bán Lẻ & Phân Phối Dầu Nhờn DMS",
+  description: "Giải pháp quản lý chuỗi bán lẻ, đại lý phân phối, tồn kho đa đơn vị, công nợ và POS bán hàng.",
   manifest: "/manifest.json",
 };
 
@@ -25,10 +25,11 @@ export default function RootLayout({
 }) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="vi"
+      className={`${montserrat.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body className="h-full w-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0F19] dark:text-slate-100 font-sans">
         {children}
       </body>
     </html>
