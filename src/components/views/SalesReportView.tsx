@@ -26,7 +26,8 @@ import {
   ShoppingBag,
   ArrowUpRight,
   Sparkles,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  Tag
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -51,7 +52,7 @@ export const SalesReportView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'revenue' | 'vat' | 'breakdown' | 'ledger'>('revenue');
 
   // Breakdown sub-tab
-  const [breakdownType, setBreakdownType] = useState<'employee' | 'product' | 'category' | 'customer' | 'channel'>('employee');
+  const [breakdownType, setBreakdownType] = useState<'employee' | 'product' | 'category' | 'customer' | 'channel' | 'tier'>('employee');
 
   // Time range filters
   const [timeRange, setTimeRange] = useState<'all' | 'today' | 'yesterday' | '7days' | '30days'>('all');
@@ -375,6 +376,34 @@ export const SalesReportView: React.FC = () => {
         .sort((a, b) => b.revenue - a.revenue);
     }
 
+    if (breakdownType === 'tier') {
+      const tierMap: Record<string, { name: string; orderCount: number; revenue: number; debt: number }> = {
+        'vip': { name: 'Bậc 3: Đại Lý VIP & Phân Phối Cấp 1', orderCount: 0, revenue: 0, debt: 0 },
+        'wholesale': { name: 'Bậc 2: Bán Sỉ & Đại Lý Cấp 2', orderCount: 0, revenue: 0, debt: 0 },
+        'retail': { name: 'Bậc 1: Bán Lẻ Trực Tiếp Tại Quầy', orderCount: 0, revenue: 0, debt: 0 }
+      };
+
+      filteredOrders.forEach((o) => {
+        const cust = customers.find(c => c.id === o.customerId);
+        let tierKey = 'retail';
+        if (cust?.tier === 'vang' || cust?.tier === 'kim_cuong') {
+          tierKey = 'vip';
+        } else if (cust?.tier === 'bac' || o.salesChannel === 'b2b') {
+          tierKey = 'wholesale';
+        }
+        tierMap[tierKey].orderCount += 1;
+        tierMap[tierKey].revenue += o.totalAmount;
+        tierMap[tierKey].debt += o.debtAmount;
+      });
+
+      return Object.values(tierMap)
+        .map((r) => ({
+          ...r,
+          ratio: metrics.netRevenue > 0 ? (r.revenue / metrics.netRevenue) * 100 : 0
+        }))
+        .sort((a, b) => b.revenue - a.revenue);
+    }
+
     // Channel breakdown
     const map: Record<string, { name: string; orderCount: number; revenue: number; debt: number }> = {
       'pos': { name: 'Bán Lẻ Tại Quầy (POS)', orderCount: 0, revenue: 0, debt: 0 },
@@ -394,7 +423,7 @@ export const SalesReportView: React.FC = () => {
         ratio: metrics.netRevenue > 0 ? (r.revenue / metrics.netRevenue) * 100 : 0
       }))
       .sort((a, b) => b.revenue - a.revenue);
-  }, [breakdownType, filteredOrders, metrics.netRevenue]);
+  }, [breakdownType, filteredOrders, metrics.netRevenue, customers]);
 
   // Paginated Sales Ledger Orders
   const paginatedLedgerOrders = useMemo(() => {
@@ -1057,7 +1086,8 @@ export const SalesReportView: React.FC = () => {
               { id: 'product', label: 'Theo Từng Mặt Hàng (SKU)', icon: Package },
               { id: 'category', label: 'Theo Nhóm Ngành Hàng', icon: ShoppingBag },
               { id: 'customer', label: 'Theo Khách Hàng', icon: Building2 },
-              { id: 'channel', label: 'Theo Kênh Bán Hàng', icon: ArrowUpRight }
+              { id: 'channel', label: 'Theo Kênh Bán Hàng', icon: ArrowUpRight },
+              { id: 'tier', label: 'Theo Bậc Giá & Đại Lý (3 Bậc)', icon: Tag }
             ].map((b) => {
               const Icon = b.icon;
               return (
@@ -1096,7 +1126,7 @@ export const SalesReportView: React.FC = () => {
                         <th className="p-4 text-center">Biên Lãi (%)</th>
                       </>
                     )}
-                    {(breakdownType === 'customer' || breakdownType === 'channel') && (
+                    {(breakdownType === 'customer' || breakdownType === 'channel' || breakdownType === 'tier') && (
                       <th className="p-4 text-right">Dư Nợ Chưa Thu</th>
                     )}
                   </tr>
@@ -1171,7 +1201,7 @@ export const SalesReportView: React.FC = () => {
                           </>
                         )}
 
-                        {(breakdownType === 'customer' || breakdownType === 'channel') && (
+                        {(breakdownType === 'customer' || breakdownType === 'channel' || breakdownType === 'tier') && (
                           <td className="p-4 text-right font-mono font-bold text-rose-600 dark:text-rose-400">
                             {row.debt ? `${row.debt.toLocaleString('vi-VN')} đ` : '0 đ'}
                           </td>

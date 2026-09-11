@@ -63,6 +63,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } else {
       set({ role: newRole, permissions: ROLE_PERMISSIONS[newRole] || [] });
     }
+    if (typeof document !== "undefined") {
+      document.cookie = `nexus_demo_role=${newRole}; path=/; max-age=604800; SameSite=Lax`;
+    }
   },
 
   login: async (email, pass) => {

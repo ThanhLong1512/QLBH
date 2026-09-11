@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { ReturnReceipt, ReturnItem } from '../../types/erp';
 import { Pagination } from '../common/Pagination';
@@ -19,7 +19,8 @@ import {
   ArrowRightLeft,
   User,
   Building2,
-  FileText
+  FileText,
+  ChevronDown
 } from 'lucide-react';
 
 export const ReturnView: React.FC = () => {
@@ -49,6 +50,20 @@ export const ReturnView: React.FC = () => {
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [selectedReceiptDetail, setSelectedReceiptDetail] = useState<ReturnReceipt | null>(null);
+
+  // Dropdown state for unified return button
+  const [isReturnMenuOpen, setIsReturnMenuOpen] = useState(false);
+  const returnDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (returnDropdownRef.current && !returnDropdownRef.current.contains(e.target as Node)) {
+        setIsReturnMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Customer Return Form State
   const [custOrderId, setCustOrderId] = useState('');
@@ -324,45 +339,103 @@ export const ReturnView: React.FC = () => {
   return (
     <div className="p-6 space-y-6 w-full">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <RotateCcw className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-            Quản Lý Trả Hàng & Hoàn Tiền
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2 truncate">
+            <RotateCcw className="w-6 h-6 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span className="truncate">Quản Lý Trả Hàng & Hoàn Tiền</span>
           </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">
             Xử lý khách hàng trả lại hàng (nhập lại kho/hàng lỗi, hoàn tiền/trừ công nợ) & xuất trả hàng cho Nhà Cung Cấp
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0 whitespace-nowrap">
           {canExportExcel && (
             <button
               onClick={exportExcel}
-              className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center gap-1.5"
+              className="px-3.5 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-2xs"
+              title="Xuất file Excel báo cáo đổi trả"
             >
               <Download className="w-4 h-4 text-emerald-600" />
-              Xuất Báo Cáo
+              <span>Xuất Báo Cáo</span>
             </button>
           )}
 
-          <button
-            id="create-customer-return-btn"
-            onClick={handleOpenCustomerModal}
-            className="px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Khách Trả Hàng (Hoàn Tiền)
-          </button>
+          {/* Unified Return Ticket Button with Dropdown Selector */}
+          <div className="relative shrink-0" ref={returnDropdownRef}>
+            <div className="inline-flex rounded-xl shadow-md shadow-indigo-600/20 shrink-0">
+              <button
+                id="create-unified-return-btn"
+                onClick={handleOpenCustomerModal}
+                className="px-4 py-2 text-xs font-bold rounded-l-xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1.5 transition-all cursor-pointer active:scale-[0.98]"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Lập Phiếu Trả Hàng</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsReturnMenuOpen(!isReturnMenuOpen)}
+                className="px-2.5 py-2 text-xs font-bold rounded-r-xl bg-indigo-700 hover:bg-indigo-800 text-white border-l border-indigo-500/40 transition-all cursor-pointer flex items-center justify-center"
+                title="Chọn loại phiếu trả hàng"
+              >
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isReturnMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
 
-          <button
-            id="create-supplier-return-btn"
-            onClick={handleOpenSupplierModal}
-            className="px-3 py-2 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
-          >
-            <ArrowRightLeft className="w-4 h-4" />
-            Trả Hàng Nhà Cung Cấp
-          </button>
+            {/* Dropdown Menu */}
+            {isReturnMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-72 py-1.5 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 z-50 animate-in fade-in zoom-in-95">
+                <div className="px-3.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Chọn loại phiếu đổi trả
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReturnMenuOpen(false);
+                    handleOpenCustomerModal();
+                  }}
+                  className="w-full px-3.5 py-2.5 text-left hover:bg-indigo-50 dark:hover:bg-slate-700/60 transition-colors flex items-start gap-2.5 cursor-pointer group"
+                >
+                  <div className="p-1.5 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                    <RotateCcw className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                      Khách Hàng Trả Hàng (Hoàn Tiền)
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Khách hoàn lại hàng, nhập kho & hoàn tiền/trừ nợ
+                    </div>
+                  </div>
+                </button>
+
+                <div className="my-1 border-t border-slate-100 dark:border-slate-700/60" />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReturnMenuOpen(false);
+                    handleOpenSupplierModal();
+                  }}
+                  className="w-full px-3.5 py-2.5 text-left hover:bg-rose-50 dark:hover:bg-slate-700/60 transition-colors flex items-start gap-2.5 cursor-pointer group"
+                >
+                  <div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                    <ArrowRightLeft className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-rose-600 dark:group-hover:text-rose-400">
+                      Trả Hàng Nhà Cung Cấp
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Xuất trả hàng lỗi về NCC, giảm trừ công nợ mua
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -641,6 +714,30 @@ export const ReturnView: React.FC = () => {
               </button>
             </div>
 
+            {/* Segmented Switcher for Return Type */}
+            <div className="px-6 pt-4">
+              <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                <button
+                  type="button"
+                  className="flex-1 py-2 px-3 text-xs font-bold rounded-lg bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm flex items-center justify-center gap-2 transition-all cursor-default"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Khách Hàng Trả Hàng (Hoàn Tiền)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCustomerModalOpen(false);
+                    handleOpenSupplierModal();
+                  }}
+                  className="flex-1 py-2 px-3 text-xs font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-700/50 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  <span>Trả Hàng Nhà Cung Cấp</span>
+                </button>
+              </div>
+            </div>
+
             <form onSubmit={handleSaveCustomerReturn} className="p-6 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -882,6 +979,30 @@ export const ReturnView: React.FC = () => {
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Segmented Switcher for Return Type */}
+            <div className="px-6 pt-4">
+              <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSupplierModalOpen(false);
+                    handleOpenCustomerModal();
+                  }}
+                  className="flex-1 py-2 px-3 text-xs font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-slate-700/50 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Khách Hàng Trả Hàng (Hoàn Tiền)</span>
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 py-2 px-3 text-xs font-bold rounded-lg bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-sm flex items-center justify-center gap-2 transition-all cursor-default"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  <span>Trả Hàng Nhà Cung Cấp</span>
+                </button>
+              </div>
             </div>
 
             <form onSubmit={handleSaveSupplierReturn} className="p-6 space-y-4">

@@ -209,6 +209,7 @@ export interface SerialTimelineEvent {
 export interface SerialItem {
   serialNumber: string;
   sku: string;
+  productId?: string;
   productName: string;
   importDate: string;
   supplier: string;
@@ -531,6 +532,7 @@ export interface StocktakeReport {
   code: string; // e.g. "PKK-20260910-001"
   date: string;
   warehouseLocation?: string;
+  warehouseId?: string | null;
   creatorName: string;
   items: StocktakeItem[];
   totalDiscrepancyAmount: number;
@@ -561,6 +563,8 @@ export interface WarehouseTransfer {
   date: string;
   sourceWarehouse: string; // e.g. "Kho Tổng"
   targetWarehouse: string; // e.g. "Chi nhánh Bình Tân"
+  sourceWarehouseId?: string | null;
+  targetWarehouseId?: string | null;
   creatorName: string;
   receiverName?: string;
   status: TransferStatus;

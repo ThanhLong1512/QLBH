@@ -20,13 +20,19 @@ import {
   Send,
   Wallet,
   Filter,
-  User
+  User,
+  FileText,
+  Receipt,
+  Calendar,
+  ArrowUpRight,
+  ShieldAlert
 } from 'lucide-react';
 
 export const DebtAgingView: React.FC = () => {
-  const { customers, recordCustomerPayment, canExportExcel, showToast } = useERP();
+  const { customers, orders, transactions, recordCustomerPayment, canExportExcel, showToast } = useERP();
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState<'all' | 'over90' | 'days61to90' | 'within60'>('all');
+  const [detailCust, setDetailCust] = useState<Customer | null>(null);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -291,15 +297,15 @@ export const DebtAgingView: React.FC = () => {
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 text-slate-500 dark:text-slate-400 uppercase font-semibold">
-              <tr>
-                <th className="p-4">Khách Hàng & Liên Hệ</th>
-                <th className="p-4 text-right">Hạn Mức</th>
-                <th className="p-4 text-right">Tổng Dư Nợ</th>
-                <th className="p-4 text-right">0 - 30 Ngày</th>
-                <th className="p-4 text-right">31 - 60 Ngày</th>
-                <th className="p-4 text-right">61 - 90 Ngày</th>
-                <th className="p-4 text-right">&gt; 90 Ngày (Xấu)</th>
-                <th className="p-4 text-center">Thao Tác</th>
+              <tr className="whitespace-nowrap">
+                <th className="p-4 whitespace-nowrap">Khách Hàng & Liên Hệ</th>
+                <th className="p-4 text-right whitespace-nowrap">Hạn Mức</th>
+                <th className="p-4 text-right whitespace-nowrap">Tổng Dư Nợ</th>
+                <th className="p-4 text-right whitespace-nowrap">0 - 30 Ngày</th>
+                <th className="p-4 text-right whitespace-nowrap">31 - 60 Ngày</th>
+                <th className="p-4 text-right whitespace-nowrap">61 - 90 Ngày</th>
+                <th className="p-4 text-right whitespace-nowrap">&gt; 90 Ngày (Xấu)</th>
+                <th className="p-4 text-center whitespace-nowrap">Thao Tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -312,34 +318,41 @@ export const DebtAgingView: React.FC = () => {
               ) : (
                 paginatedCustomers.map((cust) => (
                   <tr key={cust.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="p-4">
-                      <div className="font-bold text-slate-900 dark:text-white text-sm">{cust.name}</div>
-                      <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">
+                    <td className="p-4 whitespace-nowrap">
+                      <div
+                        onClick={() => setDetailCust(cust)}
+                        className="font-bold text-slate-900 dark:text-white text-sm hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer flex items-center gap-1.5 group whitespace-nowrap"
+                        title="Bấm để xem sổ chi tiết công nợ & danh sách hóa đơn"
+                      >
+                        <span>{cust.name}</span>
+                        <FileText className="h-3.5 w-3.5 text-slate-400 group-hover:text-indigo-500 opacity-70 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                      <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-mono mt-0.5 whitespace-nowrap">
                         {cust.code} • {cust.phone}
                       </div>
                     </td>
 
-                    <td className="p-4 text-right font-mono text-slate-600 dark:text-slate-300">
-                      {cust.creditLimit.toLocaleString('vi-VN')} đ
+                    <td className="p-4 text-right font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap tabular-nums">
+                      {cust.creditLimit.toLocaleString('vi-VN')}&nbsp;đ
                     </td>
 
-                    <td className="p-4 text-right font-mono font-black text-rose-600 dark:text-rose-400 text-sm">
-                      {cust.currentDebt.toLocaleString('vi-VN')} đ
+                    <td className="p-4 text-right font-mono font-black text-rose-600 dark:text-rose-400 text-sm whitespace-nowrap tabular-nums">
+                      {cust.currentDebt.toLocaleString('vi-VN')}&nbsp;đ
                     </td>
 
-                    <td className="p-4 text-right font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <td className="p-4 text-right font-mono text-emerald-600 dark:text-emerald-400 font-semibold whitespace-nowrap tabular-nums">
                       {cust.debtAging.within30 > 0 ? `${cust.debtAging.within30.toLocaleString('vi-VN')} đ` : '-'}
                     </td>
 
-                    <td className="p-4 text-right font-mono text-amber-600 dark:text-amber-400 font-semibold">
+                    <td className="p-4 text-right font-mono text-amber-600 dark:text-amber-400 font-semibold whitespace-nowrap tabular-nums">
                       {cust.debtAging.days31to60 > 0 ? `${cust.debtAging.days31to60.toLocaleString('vi-VN')} đ` : '-'}
                     </td>
 
-                    <td className="p-4 text-right font-mono text-orange-600 dark:text-orange-400 font-semibold">
+                    <td className="p-4 text-right font-mono text-orange-600 dark:text-orange-400 font-semibold whitespace-nowrap tabular-nums">
                       {cust.debtAging.days61to90 > 0 ? `${cust.debtAging.days61to90.toLocaleString('vi-VN')} đ` : '-'}
                     </td>
 
-                    <td className="p-4 text-right font-mono text-rose-600 dark:text-rose-400 font-bold">
+                    <td className="p-4 text-right font-mono text-rose-600 dark:text-rose-400 font-bold whitespace-nowrap tabular-nums">
                       {cust.debtAging.over90 > 0 ? `${cust.debtAging.over90.toLocaleString('vi-VN')} đ` : '-'}
                     </td>
 
@@ -348,6 +361,13 @@ export const DebtAgingView: React.FC = () => {
                       <RowActionMenu
                         label="Thao tác"
                         items={[
+                          {
+                            id: `detail-${cust.id}`,
+                            label: 'Xem sổ nợ chi tiết',
+                            icon: FileText,
+                            variant: 'indigo',
+                            onClick: () => setDetailCust(cust),
+                          },
                           {
                             id: `collect-${cust.id}`,
                             label: 'Ghi nhận thu nợ',
@@ -359,7 +379,7 @@ export const DebtAgingView: React.FC = () => {
                             id: `remind-${cust.id}`,
                             label: 'Gửi SMS/Zalo nhắc nợ',
                             icon: Send,
-                            variant: 'indigo',
+                            variant: 'default',
                             onClick: () => handleSendReminder(cust),
                           },
                         ]}
@@ -430,8 +450,15 @@ export const DebtAgingView: React.FC = () => {
                 {/* Actions */}
                 <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800/60">
                   <RowActionMenu
-                    label="Thao tác thu/nhắc nợ"
+                    label="Thao tác"
                     items={[
+                      {
+                        id: `detail-mob-${cust.id}`,
+                        label: 'Xem sổ nợ chi tiết',
+                        icon: FileText,
+                        variant: 'indigo',
+                        onClick: () => setDetailCust(cust),
+                      },
                       {
                         id: `collect-mob-${cust.id}`,
                         label: 'Ghi nhận thu nợ',
@@ -443,7 +470,7 @@ export const DebtAgingView: React.FC = () => {
                         id: `remind-mob-${cust.id}`,
                         label: 'Gửi SMS/Zalo nhắc nợ',
                         icon: Send,
-                        variant: 'indigo',
+                        variant: 'default',
                         onClick: () => handleSendReminder(cust),
                       },
                     ]}
@@ -543,22 +570,277 @@ export const DebtAgingView: React.FC = () => {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setCollectModalCust(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 >
                   Hủy Bỏ
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md active:scale-95 transition-all"
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all"
                 >
                   Xác Nhận Thu Nợ
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DETAIL DEBT LEDGER DRAWER / MODAL */}
+      {detailCust && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl h-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 flex flex-col shadow-2xl text-slate-800 dark:text-slate-100">
+            {/* Drawer Header */}
+            <div className="p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/80 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-base">Sổ Chi Tiết Công Nợ Khách Hàng</h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-300">
+                      Đối Soát Minh Bạch
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    {detailCust.name} • {detailCust.code} • SĐT: {detailCust.phone}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDetailCust(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Overview Metric strip */}
+            <div className="p-5 border-b border-slate-200 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-950/40 space-y-3">
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 shadow-xs">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Hạn Mức Tín Dụng</span>
+                  <div className="text-xs font-mono font-bold text-slate-900 dark:text-white mt-0.5">
+                    {detailCust.creditLimit.toLocaleString('vi-VN')} đ
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 shadow-xs">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Tổng Dư Nợ Hiện Tại</span>
+                  <div className="text-xs font-mono font-bold text-rose-600 dark:text-rose-400 mt-0.5">
+                    {detailCust.currentDebt.toLocaleString('vi-VN')} đ
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 shadow-xs">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Tỷ Lệ Chạm Trần</span>
+                  <div className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
+                    {detailCust.creditLimit > 0 ? `${((detailCust.currentDebt / detailCust.creditLimit) * 100).toFixed(1)}%` : 'Không giới hạn'}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4 aging bucket pills */}
+              <div className="grid grid-cols-4 gap-2 text-xs font-mono pt-1">
+                <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40">
+                  <div className="text-[9px] text-emerald-700 dark:text-emerald-400 uppercase">0-30 ngày</div>
+                  <div className="font-bold text-emerald-800 dark:text-emerald-300 text-[11px] mt-0.5">
+                    {detailCust.debtAging.within30 > 0 ? `${detailCust.debtAging.within30.toLocaleString('vi-VN')} đ` : '0 đ'}
+                  </div>
+                </div>
+                <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40">
+                  <div className="text-[9px] text-amber-700 dark:text-amber-400 uppercase">31-60 ngày</div>
+                  <div className="font-bold text-amber-800 dark:text-amber-300 text-[11px] mt-0.5">
+                    {detailCust.debtAging.days31to60 > 0 ? `${detailCust.debtAging.days31to60.toLocaleString('vi-VN')} đ` : '0 đ'}
+                  </div>
+                </div>
+                <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/40">
+                  <div className="text-[9px] text-orange-700 dark:text-orange-400 uppercase">61-90 ngày</div>
+                  <div className="font-bold text-orange-800 dark:text-orange-300 text-[11px] mt-0.5">
+                    {detailCust.debtAging.days61to90 > 0 ? `${detailCust.debtAging.days61to90.toLocaleString('vi-VN')} đ` : '0 đ'}
+                  </div>
+                </div>
+                <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40">
+                  <div className="text-[9px] text-rose-700 dark:text-rose-400 uppercase">&gt; 90 ngày</div>
+                  <div className="font-bold text-rose-800 dark:text-rose-300 text-[11px] mt-0.5">
+                    {detailCust.debtAging.over90 > 0 ? `${detailCust.debtAging.over90.toLocaleString('vi-VN')} đ` : '0 đ'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Invoices List */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                  <Receipt className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                  Danh Sách Hóa Đơn & Đơn Hàng Còn Nợ
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  {orders.filter(o => o.customerId === detailCust.id && o.debtAmount > 0).length} đơn nợ
+                </span>
+              </div>
+
+              {/* Order debt items */}
+              {(() => {
+                const customerOrders = orders.filter(o => o.customerId === detailCust.id && o.debtAmount > 0);
+                return (
+                  <div className="space-y-2.5">
+                    {customerOrders.length > 0 ? (
+                      customerOrders.map(order => {
+                        const orderDate = new Date(order.createdAt);
+                        const now = new Date();
+                        const diffTime = Math.abs(now.getTime() - orderDate.getTime());
+                        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                        const tier =
+                          diffDays <= 30
+                            ? { label: 'Trong hạn (0-30 ngày)', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-300' }
+                            : diffDays <= 60
+                            ? { label: 'Quá hạn nhẹ (31-60 ngày)', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-amber-300' }
+                            : diffDays <= 90
+                            ? { label: 'Cảnh báo (61-90 ngày)', color: 'bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300 border-orange-300' }
+                            : { label: 'Nợ xấu (>90 ngày)', color: 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border-rose-300' };
+
+                        return (
+                          <div
+                            key={order.id}
+                            className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 shadow-xs space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-xs text-indigo-600 dark:text-indigo-400">{order.code}</span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${tier.color}`}>
+                                  {tier.label}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-400 font-mono">
+                                Ngày: {order.createdAt} ({diffDays} ngày trước)
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 text-xs pt-1 border-t border-slate-100 dark:border-slate-700/50">
+                              <div>
+                                <span className="text-[10px] text-slate-400">Tổng đơn:</span>
+                                <div className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                                  {order.totalAmount.toLocaleString('vi-VN')} đ
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-slate-400">Đã thanh toán:</span>
+                                <div className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                                  {order.paidAmount.toLocaleString('vi-VN')} đ
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[10px] text-slate-400">Dư nợ đơn này:</span>
+                                <div className="font-mono font-black text-rose-600 dark:text-rose-400">
+                                  {order.debtAmount.toLocaleString('vi-VN')} đ
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : null}
+
+                    {/* Residual Historical Balance if initial mock has remaining debt */}
+                    <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-slate-700 text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
+                          <Calendar className="h-4 w-4 text-slate-400" />
+                          <span>Dư nợ hợp đồng kỳ trước (Ghi nợ đầu kỳ)</span>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono font-bold">
+                          Khớp Sổ Kế Toán
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Các hợp đồng cung ứng và đơn xuất kho tích lũy đã đối soát qua biên bản công nợ định kỳ.
+                      </p>
+                      <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-700/60 font-mono">
+                        <span className="text-slate-500">Số dư nợ hạch toán:</span>
+                        <span className="font-bold text-rose-600 dark:text-rose-400 text-sm">
+                          {detailCust.currentDebt.toLocaleString('vi-VN')} đ
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Payment Receipts History */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                    <Wallet className="h-3.5 w-3.5 text-emerald-600" /> Lịch Sử Phiếu Thu Gần Đây
+                  </div>
+                </div>
+                {transactions.filter(t => t.type === 'thu' && t.person === detailCust.name).length > 0 ? (
+                  <div className="space-y-2">
+                    {transactions
+                      .filter(t => t.type === 'thu' && t.person === detailCust.name)
+                      .slice(0, 5)
+                      .map(tx => (
+                        <div key={tx.id} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 flex justify-between items-center text-xs">
+                          <div>
+                            <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{tx.code}</span>
+                            <span className="text-slate-400 text-[11px] ml-2">({tx.date})</span>
+                            <div className="text-[11px] text-slate-500">{tx.description || tx.category}</div>
+                          </div>
+                          <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            +{tx.amount.toLocaleString('vi-VN')} đ
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/30 text-center text-xs text-slate-400">
+                    Chưa có phiếu thu nợ nào phát sinh trong kỳ này.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Drawer Footer Actions */}
+            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 flex justify-between items-center">
+              <button
+                type="button"
+                onClick={() => {
+                  const cust = detailCust;
+                  setDetailCust(null);
+                  handleSendReminder(cust);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Send className="h-3.5 w-3.5 text-indigo-600" />
+                Gửi SMS Nhắc Nợ
+              </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDetailCust(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cust = detailCust;
+                    setDetailCust(null);
+                    handleOpenCollectModal(cust);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  Lập Phiếu Thu Nợ
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

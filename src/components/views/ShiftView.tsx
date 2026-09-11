@@ -14,15 +14,21 @@ import {
   Layers,
   Lock,
   Unlock,
-  ShieldCheck
+  ShieldCheck,
+  X
 } from 'lucide-react';
 
 export const ShiftView: React.FC = () => {
-  const { currentShift, closeShift, openPrintModal, showToast } = useERP();
+  const { currentShift, closeShift, openNewShift, employees, openPrintModal, showToast } = useERP();
 
   const [actualCash, setActualCash] = useState<number>(currentShift.actualCash || currentShift.expectedCash || 0);
   const [discrepancyNote, setDiscrepancyNote] = useState<string>('');
   const [showDenomHelper, setShowDenomHelper] = useState(false);
+
+  // Modal Open New Shift State
+  const [isOpenNewShiftModal, setIsOpenNewShiftModal] = useState(false);
+  const [newCashierName, setNewCashierName] = useState(employees[0]?.name || 'Thu Ngân Ca Chiều');
+  const [newOpeningCash, setNewOpeningCash] = useState<number>(currentShift.actualCash || 2000000);
 
   // Denominations counter for quick VN cash audit
   const [denoms, setDenoms] = useState<{ [key: number]: number }>({
@@ -58,6 +64,18 @@ export const ShiftView: React.FC = () => {
     }
 
     closeShift(actualCash, discrepancyNote);
+  };
+
+  const handleConfirmOpenShift = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCashierName.trim()) {
+      showToast('⚠️ Vui lòng nhập hoặc chọn tên thu ngân nhận ca!');
+      return;
+    }
+    openNewShift(newCashierName.trim(), newOpeningCash);
+    setIsOpenNewShiftModal(false);
+    setActualCash(newOpeningCash);
+    setDiscrepancyNote('');
   };
 
   const handlePrintHandover = () => {
@@ -329,13 +347,84 @@ export const ShiftView: React.FC = () => {
                 Xác Nhận Chốt Ca & Khóa Sổ Bán Hàng
               </button>
             ) : (
-              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-center text-slate-600 dark:text-slate-400 font-semibold">
-                🔒 Ca này đã được đóng khóa sổ lúc {currentShift.closedAt}. Không thể chỉnh sửa thêm.
+              <div className="space-y-3">
+                <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-center text-slate-600 dark:text-slate-400 font-semibold">
+                  🔒 Ca này đã được đóng khóa sổ lúc {currentShift.closedAt}. Không thể chỉnh sửa thêm.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOpenNewShiftModal(true)}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-md transition-all active:scale-98"
+                >
+                  <Unlock className="h-4 w-4" />
+                  Mở Ca Bán Hàng Mới (Ca Tiếp Theo)
+                </button>
               </div>
             )}
           </form>
         </div>
       </div>
+
+      {/* OPEN NEW SHIFT MODAL */}
+      {isOpenNewShiftModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <Unlock className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                Mở Ca Bán Hàng Mới
+              </h3>
+              <button
+                onClick={() => setIsOpenNewShiftModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmOpenShift} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-300">Thu Ngân Nhận Ca:</label>
+                <input
+                  type="text"
+                  required
+                  value={newCashierName}
+                  onChange={(e) => setNewCashierName(e.target.value)}
+                  placeholder="Nhập tên thu ngân..."
+                  className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-slate-900 dark:text-white font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-300">Tiền Mặt Bàn Giao Đầu Ca (VNĐ):</label>
+                <MoneyInput
+                  value={newOpeningCash}
+                  onChange={(val) => setNewOpeningCash(val)}
+                  suffix="đ"
+                  className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400"
+                />
+                <p className="text-[11px] text-slate-400">Tiền lẻ chuẩn bị sẵn trong két bàn giao từ ca trước.</p>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsOpenNewShiftModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md"
+                >
+                  Xác Nhận Mở Ca
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

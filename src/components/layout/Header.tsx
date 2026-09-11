@@ -25,8 +25,10 @@ import {
   Wallet,
   Check,
   MessageSquare,
-  Menu
+  Menu,
+  Sparkles
 } from 'lucide-react';
+import { RoleTourModal } from '../common/RoleTourModal';
 
 interface Props {
   activeView: string;
@@ -59,6 +61,7 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView, onToggleMob
   const [showAlertsDropdown, setShowAlertsDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showWarehouseDropdown, setShowWarehouseDropdown] = useState(false);
+  const [isRoleTourOpen, setIsRoleTourOpen] = useState(false);
 
   const viewTitles: Record<string, { title: string; subtitle: string }> = {
     dashboard: { title: 'Dashboard KPI Điều Hành', subtitle: 'Tổng quan chỉ số kinh doanh, tài chính & cảnh báo vận hành' },
@@ -85,41 +88,43 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView, onToggleMob
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 text-slate-800 dark:border-slate-800 dark:bg-[#0B0F19]/95 dark:text-white backdrop-blur px-4 sm:px-6 transition-colors duration-200">
       {/* Title & Context & Mobile Hamburger Button */}
-      <div className="flex items-center gap-2.5 sm:gap-3">
+      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 mr-3">
         {onToggleMobileMenu && (
           <button
             onClick={onToggleMobileMenu}
-            className="p-1.5 -ml-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 md:hidden transition-colors border border-slate-200 dark:border-slate-700/70"
+            className="p-1.5 -ml-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 md:hidden transition-colors border border-slate-200 dark:border-slate-700/70 shrink-0"
             title="Mở menu điều hướng"
             aria-label="Open Navigation Menu"
           >
             <Menu className="w-5 h-5" />
           </button>
         )}
-        <div>
-          <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 truncate">
-            <span>{currentInfo.title}</span>
+        <div className="min-w-0">
+          <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 truncate whitespace-nowrap">
+            <span className="truncate">{currentInfo.title}</span>
             {!canViewCosts && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium hidden sm:inline">
-                Chế độ Thu Ngân (Đã ẩn giá vốn)
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium hidden sm:inline whitespace-nowrap shrink-0">
+                Chế độ Thu Ngân
               </span>
             )}
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">{currentInfo.subtitle}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 hidden md:block truncate whitespace-nowrap max-w-[320px] lg:max-w-[480px]">
+            {currentInfo.subtitle}
+          </p>
         </div>
       </div>
 
-      {/* Action Controls - Grouped Neatly */}
-      <div className="flex items-center gap-2.5">
+      {/* Action Controls - Single Horizontal Row (1 Hàng Ngang) */}
+      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
         {/* GROUP 0: Active Warehouse Switcher */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => setShowWarehouseDropdown(!showWarehouseDropdown)}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/70 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 shadow-xs transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/70 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 shadow-xs transition-all active:scale-95 whitespace-nowrap"
             title="Kho hàng đang làm việc (Click để đổi kho)"
           >
             <Store className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span className="hidden sm:inline font-bold text-slate-900 dark:text-white max-w-[130px] truncate">
+            <span className="hidden sm:inline font-bold text-slate-900 dark:text-white max-w-[140px] truncate whitespace-nowrap">
               {activeWarehouse?.name || 'Chọn Kho'}
             </span>
             <ChevronDown className="h-3 w-3 text-slate-400 shrink-0" />
@@ -171,16 +176,16 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView, onToggleMob
         </div>
 
         {/* GROUP 1: POS Quick Actions Group */}
-        <div className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800/80 p-0.5 border border-slate-200 dark:border-slate-700/70 shadow-sm">
+        <div className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800/80 p-0.5 border border-slate-200 dark:border-slate-700/70 shadow-sm shrink-0">
           <button
             onClick={() => openScannerModal(() => {
               setActiveView('pos');
             })}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition-all active:scale-95 whitespace-nowrap"
             title="Mở máy quét mã vạch Barcode/QR từ Camera"
           >
-            <ScanBarcode className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
-            <span className="hidden md:inline">Quét Mã</span>
+            <ScanBarcode className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
+            <span className="hidden md:inline whitespace-nowrap">Quét Mã</span>
           </button>
 
           <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 my-auto" />
@@ -192,161 +197,94 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView, onToggleMob
                 openPrintModal('k80', lastOrder);
               }
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xs transition-all active:scale-95 whitespace-nowrap"
             title="Xem trước mẫu in đơn hàng mới nhất"
           >
-            <Printer className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
-            <span className="hidden md:inline">Mẫu In</span>
+            <Printer className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+            <span className="hidden md:inline whitespace-nowrap">Mẫu In</span>
           </button>
         </div>
 
-        {/* GROUP 2: System Settings & Role Group */}
-        <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 p-0.5 border border-slate-200 dark:border-slate-700/70 shadow-sm">
-          {/* Dark / Light Mode Toggle Button */}
+        {/* Telegram Alerts Dropdown Trigger */}
+        <div className="relative shrink-0">
           <button
-            onClick={toggleTheme}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 transition-all active:scale-95"
-            title={theme === 'dark' ? 'Chuyển sang Chế độ Sáng (Light Mode)' : 'Chuyển sang Chế độ Tối (Dark Mode)'}
+            onClick={() => setShowAlertsDropdown(!showAlertsDropdown)}
+            className="relative p-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/70 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-all shadow-xs active:scale-95 cursor-pointer"
+            title="Thông báo cảnh báo Telegram"
           >
-            {theme === 'dark' ? (
-              <>
-                <Sun className="h-4 w-4 text-amber-400 animate-in spin-in-90 duration-200" />
-                <span className="hidden lg:inline text-[11px] text-amber-300">Sáng</span>
-              </>
-            ) : (
-              <>
-                <Moon className="h-4 w-4 text-indigo-600 animate-in spin-in-90 duration-200" />
-                <span className="hidden lg:inline text-[11px] text-indigo-600">Tối</span>
-              </>
+            <Bell className="h-4 w-4" />
+            {telegramAlerts.length > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white animate-pulse">
+                {telegramAlerts.length}
+              </span>
             )}
           </button>
 
-          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 my-auto" />
-
-          {/* Static Role Badge (1 người 1 role cố định - Không chuyển đổi qua lại) */}
-          <div
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold select-none border transition-all ${
-              role === 'admin'
-                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800/80'
-                : role === 'manager'
-                ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200/80 dark:border-purple-800/80'
-                : role === 'cashier'
-                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80'
-                : role === 'warehouse'
-                ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80'
-                : 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200/80 dark:border-blue-800/80'
-            }`}
-            title={`Vai trò tài khoản: ${currentUser?.roleTitle || ROLE_CONFIG[role]?.label || role}`}
-          >
-            {role === 'admin' ? (
-              <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            ) : role === 'manager' ? (
-              <Store className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
-            ) : role === 'cashier' ? (
-              <Shield className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            ) : role === 'warehouse' ? (
-              <Warehouse className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-            ) : (
-              <Wallet className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-            )}
-            <span className="hidden sm:inline">{currentUser?.roleTitle || ROLE_CONFIG[role]?.label || role}</span>
-            <span className="sm:hidden">{ROLE_CONFIG[role]?.label.split(' ')[0] || role}</span>
-          </div>
-
-          <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 my-auto" />
-
-          {/* Telegram Alerts Dropdown Trigger */}
-          <div className="relative">
-            <button
-              onClick={() => setShowAlertsDropdown(!showAlertsDropdown)}
-              className="relative p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-colors"
-              title="Thông báo cảnh báo Telegram"
-            >
-              <Bell className="h-4 w-4" />
-              {telegramAlerts.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[8px] font-bold text-white animate-pulse">
-                  {telegramAlerts.length}
+          {showAlertsDropdown && (
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl p-4 space-y-3 z-50 animate-in fade-in duration-150 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Radio className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
+                  Kênh Cảnh Báo Telegram Dispatch (0đ)
                 </span>
-              )}
-            </button>
-
-            {showAlertsDropdown && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl p-4 space-y-3 z-50 animate-in fade-in duration-150 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
-                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    <Radio className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
-                    Kênh Cảnh Báo Telegram Dispatch (0đ)
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">Live Sync</span>
-                </div>
-
-                <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
-                  {telegramAlerts.map((alert) => (
-                    <div
-                      key={alert.id}
-                      className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1 dark:bg-slate-800/60 dark:border-slate-700/60"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-800 dark:text-slate-200">{alert.title}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">{alert.timestamp}</span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{alert.message}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="border-t border-slate-200 dark:border-slate-800 pt-2 flex justify-between items-center text-[10px] text-slate-500">
-                  <span>Nhóm: Ban Giám Đốc & Kế Toán</span>
-                  <button
-                    onClick={() => setShowAlertsDropdown(false)}
-                    className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
-                  >
-                    Đóng
-                  </button>
-                </div>
+                <span className="text-[10px] text-slate-400 font-mono">Live Sync</span>
               </div>
-            )}
-          </div>
+
+              <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                {telegramAlerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1 dark:bg-slate-800/60 dark:border-slate-700/60"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{alert.title}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{alert.timestamp}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{alert.message}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t border-slate-200 dark:border-slate-800 pt-2 flex justify-between items-center text-[10px] text-slate-500">
+                <span>Nhóm: Ban Giám Đốc & Kế Toán</span>
+                <button
+                  onClick={() => setShowAlertsDropdown(false)}
+                  className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Quick Internal Chat Button */}
+        {/* Role Tour Switcher Button (Thử Nghiệm Đa Vai Trò) */}
         <button
-          onClick={() => setIsChatOpen(!isChatOpen)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all active:scale-95 cursor-pointer ${
-            isChatOpen
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-              : 'bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
-          }`}
-          title="Mở Chatbox Nội Bộ"
+          onClick={() => setIsRoleTourOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/90 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs active:scale-95"
+          title="Trải nghiệm đổi vai trò người dùng (Admin, Thu ngân, Thủ kho, Kế toán, Quản lý)"
         >
-          <MessageSquare className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-          <span className="hidden sm:inline">Chat Nội Bộ</span>
-          {unreadChatCount > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
-              {unreadChatCount}
-            </span>
-          )}
+          <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+          <span className="hidden md:inline font-semibold">Vai trò:</span>
+          <span className="font-bold">{role === 'admin' ? 'Admin' : role === 'cashier' ? 'Thu Ngân' : role === 'warehouse' ? 'Thủ Kho' : role === 'accountant' ? 'Kế Toán' : 'Quản Lý'}</span>
+          <ChevronDown className="w-3 h-3 opacity-60 ml-0.5" />
         </button>
 
-        {/* User Profile & Menu Dropdown */}
-        <div className="relative pl-2 border-l border-slate-200 dark:border-slate-800">
+        {/* User Profile & Menu Dropdown (Single Horizontal Row) */}
+        <div className="relative pl-1.5 border-l border-slate-200 dark:border-slate-800 shrink-0">
           <button
             onClick={() => setShowUserDropdown(!showUserDropdown)}
-            className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-left"
-            title="Thông tin tài khoản & Đăng xuất"
+            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-left whitespace-nowrap cursor-pointer"
+            title="Thông tin tài khoản & Cài đặt"
           >
-            <div className="h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 flex items-center justify-center text-xs font-bold border border-indigo-200 dark:border-indigo-800 shadow-xs">
+            <div className="h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 flex items-center justify-center text-xs font-bold border border-indigo-200 dark:border-indigo-800 shadow-xs shrink-0">
               {role === 'admin' ? 'AD' : role === 'manager' ? 'MN' : role === 'cashier' ? 'TN' : role === 'warehouse' ? 'TK' : 'KT'}
             </div>
-            <div className="hidden lg:block text-left text-xs">
-              <div className="font-bold text-slate-900 dark:text-white leading-tight flex items-center gap-1">
-                <span>{currentUser?.name || 'Người Dùng ERP'}</span>
-                <ChevronDown className="h-3 w-3 text-slate-400" />
-              </div>
-              <div className="text-[10px] text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {currentUser?.roleTitle || ROLE_CONFIG[role]?.title || 'Nhân Viên'}
-              </div>
+            <div className="hidden sm:flex items-center gap-1.5 text-xs">
+              <span className="font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                {currentUser?.name || 'Người Dùng ERP'}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
             </div>
           </button>
 
@@ -370,17 +308,27 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView, onToggleMob
                 </div>
               </div>
 
-              {/* Account Role & System Permission Info (Cố định 1 người 1 role) */}
+              {/* Account Role & System Permission Info with Tour Switcher Link */}
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  Vai Trò & Quyền Hạn
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+                  <span>Vai Trò & Quyền Hạn</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUserDropdown(false);
+                      setIsRoleTourOpen(true);
+                    }}
+                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Sparkles className="w-2.5 h-2.5" /> Đổi vai trò demo
+                  </button>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-xs text-slate-900 dark:text-white">
                     {currentUser?.roleTitle || ROLE_CONFIG[role].label}
                   </span>
                   <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
-                    {role === 'admin' ? 'Toàn quyền Admin' : 'Quyền theo vai trò'}
+                    {role === 'admin' ? 'Toàn quyền Admin' : 'Quyền theo RBAC'}
                   </span>
                 </div>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
@@ -388,6 +336,49 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView, onToggleMob
                     ? 'Bạn có toàn bộ đặc quyền quản trị và vận hành toàn hệ thống.' 
                     : ROLE_CONFIG[role].description}
                 </p>
+              </div>
+
+              {/* Dark / Light Mode Toggle inside User Profile Menu */}
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2 rounded-lg transition-colors ${
+                    theme === 'dark'
+                      ? 'bg-amber-400/15 text-amber-400 border border-amber-400/20'
+                      : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                  }`}>
+                    {theme === 'dark' ? (
+                      <Moon className="h-4 w-4" />
+                    ) : (
+                      <Sun className="h-4 w-4 text-amber-500" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">
+                      Chế Độ Giao Diện
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                      {theme === 'dark' ? 'Đang bật Giao diện Tối (Dark)' : 'Đang bật Giao diện Sáng (Light)'}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    theme === 'dark' ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-700'
+                  }`}
+                  role="switch"
+                  aria-checked={theme === 'dark'}
+                  title={theme === 'dark' ? 'Chuyển sang Chế độ Sáng' : 'Chuyển sang Chế độ Tối'}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      theme === 'dark' ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
 
               {/* Menu Actions */}
@@ -420,6 +411,9 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView, onToggleMob
           )}
         </div>
       </div>
+
+      {/* Role Tour Modal */}
+      <RoleTourModal isOpen={isRoleTourOpen} onClose={() => setIsRoleTourOpen(false)} />
     </header>
   );
 };

@@ -36,26 +36,7 @@ import {
   StockBalance,
   StockLedger
 } from '../types/erp';
-import {
-  INITIAL_PRODUCTS,
-  INITIAL_CUSTOMERS,
-  INITIAL_BATCHES,
-  INITIAL_SERIALS,
-  INITIAL_ORDERS,
-  INITIAL_SHIFTS,
-  INITIAL_TRANSACTIONS,
-  INITIAL_ALERTS,
-  INITIAL_APPROVALS,
-  INITIAL_EMPLOYEES,
-  INITIAL_SUPPLIERS,
-  INITIAL_INBOUNDS,
-  INITIAL_OUTBOUNDS,
-  INITIAL_RETURNS,
-  INITIAL_WARRANTIES,
-  INITIAL_STOCKTAKES,
-  INITIAL_TRANSFERS
-} from '../data/mockData';
-import { getCachedData, setCachedData } from '../store/offlineDB';
+import { getCachedData, setCachedData, offlineDB, syncOfflineOrders } from '../store/offlineDB';
 
 interface PrintModalState {
   isOpen: boolean;
@@ -68,7 +49,7 @@ interface VietQRModalState {
   amount: number;
   orderCode: string;
   customerName?: string;
-  onSuccess?: () => void;
+  onSuccess?: () => void | Promise<void>;
 }
 
 interface PinModalState {
@@ -147,12 +128,12 @@ interface ERPContextType {
   outbounds: StockOutboundReceipt[];
   stocktakes: StocktakeReport[];
   transfers: WarehouseTransfer[];
-  addInboundReceipt: (receipt: Omit<StockInboundReceipt, 'id' | 'code'>) => void;
-  addOutboundReceipt: (receipt: Omit<StockOutboundReceipt, 'id' | 'code'>) => void;
-  addStocktakeReport: (report: Omit<StocktakeReport, 'id' | 'code'>) => void;
+  addInboundReceipt: (receipt: Omit<StockInboundReceipt, 'id' | 'code'>) => Promise<StockInboundReceipt | null>;
+  addOutboundReceipt: (receipt: Omit<StockOutboundReceipt, 'id' | 'code'>) => Promise<StockOutboundReceipt | null>;
+  addStocktakeReport: (report: Omit<StocktakeReport, 'id' | 'code'>) => Promise<StocktakeReport | null>;
   reconcileStocktake: (items: { productId: string; actualStock: number }[]) => void;
-  addWarehouseTransfer: (transfer: Omit<WarehouseTransfer, 'id' | 'code'>) => void;
-  updateTransferStatus: (transferId: string, status: WarehouseTransfer['status'], receiverName?: string) => void;
+  addWarehouseTransfer: (transfer: Omit<WarehouseTransfer, 'id' | 'code'>) => Promise<WarehouseTransfer | null>;
+  updateTransferStatus: (transferId: string, status: WarehouseTransfer['status'], receiverName?: string) => Promise<boolean>;
   addBatch: (batch: ProductBatch) => void;
 
   // Master Kho & Chi Nhánh (Branches & Warehouses)
@@ -187,7 +168,8 @@ interface ERPContextType {
   closeTab: (tabId: string) => void;
   setTabCustomer: (tabId: string, customerId: string) => void;
   setTabTierPrice: (tabId: string, tier: TierPriceType) => void;
-  addItemToTab: (tabId: string, product: Product, unitName?: string) => void;
+  addItemToTab: (tabId: string, product: Product, unitName?: string, serialNumbers?: string[]) => void;
+  updateCartItemSerials: (tabId: string, productId: string, unitName: string, serialNumbers: string[]) => void;
   updateCartItemQty: (tabId: string, productId: string, unitName: string, quantity: number) => void;
   updateCartItemPrice: (tabId: string, productId: string, unitName: string, unitPrice: number, discountPercent: number) => void;
   updateCartItemUnit: (tabId: string, productId: string, oldUnitName: string, newUnitName: string) => void;
@@ -196,7 +178,7 @@ interface ERPContextType {
   setTabShipping: (tabId: string, shipping: number) => void;
   setTabPaidAmount: (tabId: string, paid: number) => void;
   setTabNotes: (tabId: string, notes: string) => void;
-  checkoutTab: (tabId: string, paymentMethod: PaymentMethod) => Order | null;
+  checkoutTab: (tabId: string, paymentMethod: PaymentMethod) => Promise<Order | null>;
 
   // Orders
   orders: Order[];
@@ -218,6 +200,7 @@ interface ERPContextType {
   approvalRequests: CreditApprovalRequest[];
   createCreditApprovalRequest: (tabId: string, reason: string) => void;
   resolveCreditApproval: (requestId: string, approved: boolean, note?: string) => void;
+  grantCreditApprovalForTab: (tabId: string, note?: string) => void;
   addApprovalMessage: (requestId: string, message: string) => void;
 
   // Modals & Tools
@@ -226,7 +209,7 @@ interface ERPContextType {
   closePrintModal: () => void;
 
   vietQrModal: VietQRModalState;
-  openVietQrModal: (amount: number, orderCode: string, customerName?: string, onSuccess?: () => void) => void;
+  openVietQrModal: (amount: number, orderCode: string, customerName?: string, onSuccess?: () => void | Promise<void>) => void;
   closeVietQrModal: () => void;
 
   pinModal: PinModalState;
@@ -254,6 +237,7 @@ interface ERPContextType {
   isLoadingBootstrap: boolean;
   refreshData: () => Promise<void>;
   resetAllData: () => void;
+  seedDatabase: () => Promise<void>;
   activeToast: string | null;
   showToast: (msg: string) => void;
 
@@ -466,33 +450,36 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const res = await fetch('/api/bootstrap');
       const json = await res.json();
       if (json.success && json.data) {
-        if (json.data.products && json.data.products.length > 0) setProducts(json.data.products);
-        if (json.data.customers && json.data.customers.length > 0) setCustomers(json.data.customers);
-        if (json.data.orders && json.data.orders.length > 0) setOrders(json.data.orders);
-        if (json.data.shifts && json.data.shifts.length > 0) setShifts(json.data.shifts);
-        if (json.data.transactions && json.data.transactions.length > 0) setTransactions(json.data.transactions);
-        if (json.data.employees && json.data.employees.length > 0) setEmployees(json.data.employees);
-        if (json.data.suppliers && json.data.suppliers.length > 0) setSuppliers(json.data.suppliers);
-        if (json.data.inbounds && json.data.inbounds.length > 0) setInbounds(json.data.inbounds);
-        if (json.data.outbounds && json.data.outbounds.length > 0) setOutbounds(json.data.outbounds);
-        if (json.data.returns && json.data.returns.length > 0) setReturns(json.data.returns);
-        if (json.data.warranties && json.data.warranties.length > 0) setWarranties(json.data.warranties);
-        if (json.data.serials && json.data.serials.length > 0) setSerials(json.data.serials);
-        if (json.data.approvalRequests && json.data.approvalRequests.length > 0) setApprovalRequests(json.data.approvalRequests);
-        if (json.data.stocktakes && json.data.stocktakes.length > 0) setStocktakes(json.data.stocktakes);
-        if (json.data.transfers && json.data.transfers.length > 0) setTransfers(json.data.transfers);
-        if (json.data.warehouses && json.data.warehouses.length > 0) {
+        // DB (Postgres) = nguồn đúng duy nhất: luôn ghi đè state vô điều kiện
+        if (Array.isArray(json.data.products)) setProducts(json.data.products);
+        if (Array.isArray(json.data.customers)) setCustomers(json.data.customers);
+        if (Array.isArray(json.data.batches)) setBatches(json.data.batches);
+        if (Array.isArray(json.data.serials)) setSerials(json.data.serials);
+        if (Array.isArray(json.data.orders)) setOrders(json.data.orders);
+        if (Array.isArray(json.data.shifts)) setShifts(json.data.shifts);
+        if (Array.isArray(json.data.transactions)) setTransactions(json.data.transactions);
+        if (Array.isArray(json.data.employees)) setEmployees(json.data.employees);
+        if (Array.isArray(json.data.suppliers)) setSuppliers(json.data.suppliers);
+        if (Array.isArray(json.data.inbounds)) setInbounds(json.data.inbounds);
+        if (Array.isArray(json.data.outbounds)) setOutbounds(json.data.outbounds);
+        if (Array.isArray(json.data.returns)) setReturns(json.data.returns);
+        if (Array.isArray(json.data.warranties)) setWarranties(json.data.warranties);
+        if (Array.isArray(json.data.approvalRequests)) setApprovalRequests(json.data.approvalRequests);
+        if (Array.isArray(json.data.stocktakes)) setStocktakes(json.data.stocktakes);
+        if (Array.isArray(json.data.transfers)) setTransfers(json.data.transfers);
+        if (Array.isArray(json.data.warehouses)) {
           setWarehouses(json.data.warehouses);
           setActiveWarehouseState(prev => prev || json.data.warehouses.find((w: any) => w.isDefault) || json.data.warehouses[0]);
         }
-        if (json.data.branches && json.data.branches.length > 0) {
+        if (Array.isArray(json.data.branches)) {
           setBranches(json.data.branches);
           setActiveBranchState(prev => prev || json.data.branches[0]);
         }
-        if (json.data.stockBalances && json.data.stockBalances.length > 0) {
+        if (Array.isArray(json.data.stockBalances)) {
           setStockBalances(json.data.stockBalances);
         }
-        setCachedData('bootstrap_snapshot', json.data);
+        // Cache luôn bị DB ghi đè (DB wins)
+        await setCachedData('bootstrap_snapshot', json.data);
       }
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu từ PostgreSQL Supabase:', err);
@@ -506,33 +493,34 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     getCachedData<any>('bootstrap_snapshot')
       .then(cached => {
         if (cached) {
-          if (cached.products?.length) setProducts(cached.products);
-          if (cached.customers?.length) setCustomers(cached.customers);
-          if (cached.orders?.length) setOrders(cached.orders);
-          if (cached.shifts?.length) setShifts(cached.shifts);
-          if (cached.transactions?.length) setTransactions(cached.transactions);
-          if (cached.employees?.length) setEmployees(cached.employees);
-          if (cached.suppliers?.length) setSuppliers(cached.suppliers);
-          if (cached.inbounds?.length) setInbounds(cached.inbounds);
-          if (cached.outbounds?.length) setOutbounds(cached.outbounds);
-          if (cached.returns?.length) setReturns(cached.returns);
-          if (cached.warranties?.length) setWarranties(cached.warranties);
-          if (cached.serials?.length) setSerials(cached.serials);
-          if (cached.approvalRequests?.length) setApprovalRequests(cached.approvalRequests);
-          if (cached.stocktakes?.length) setStocktakes(cached.stocktakes);
-          if (cached.transfers?.length) setTransfers(cached.transfers);
-          if (cached.warehouses?.length) {
+          if (Array.isArray(cached.products)) setProducts(cached.products);
+          if (Array.isArray(cached.customers)) setCustomers(cached.customers);
+          if (Array.isArray(cached.batches)) setBatches(cached.batches);
+          if (Array.isArray(cached.serials)) setSerials(cached.serials);
+          if (Array.isArray(cached.orders)) setOrders(cached.orders);
+          if (Array.isArray(cached.shifts)) setShifts(cached.shifts);
+          if (Array.isArray(cached.transactions)) setTransactions(cached.transactions);
+          if (Array.isArray(cached.employees)) setEmployees(cached.employees);
+          if (Array.isArray(cached.suppliers)) setSuppliers(cached.suppliers);
+          if (Array.isArray(cached.inbounds)) setInbounds(cached.inbounds);
+          if (Array.isArray(cached.outbounds)) setOutbounds(cached.outbounds);
+          if (Array.isArray(cached.returns)) setReturns(cached.returns);
+          if (Array.isArray(cached.warranties)) setWarranties(cached.warranties);
+          if (Array.isArray(cached.approvalRequests)) setApprovalRequests(cached.approvalRequests);
+          if (Array.isArray(cached.stocktakes)) setStocktakes(cached.stocktakes);
+          if (Array.isArray(cached.transfers)) setTransfers(cached.transfers);
+          if (Array.isArray(cached.warehouses)) {
             setWarehouses(cached.warehouses);
             setActiveWarehouseState(prev => prev || cached.warehouses.find((w: any) => w.isDefault) || cached.warehouses[0]);
           }
-          if (cached.branches?.length) {
+          if (Array.isArray(cached.branches)) {
             setBranches(cached.branches);
             setActiveBranchState(prev => prev || cached.branches[0]);
           }
-          if (cached.stockBalances?.length) setStockBalances(cached.stockBalances);
+          if (Array.isArray(cached.stockBalances)) setStockBalances(cached.stockBalances);
           // Immediately set loading to false since we already have cached snapshot
           setIsLoadingBootstrap(false);
-          // Silently revalidate in the background
+          // Silently revalidate against PostgreSQL SSOT in the background
           refreshData(false);
         } else {
           refreshData(true);
@@ -543,16 +531,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
   }, [refreshData]);
 
-  // Save to LocalStorage on changes
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}transfers`, JSON.stringify(transfers));
-  }, [transfers]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}stocktakes`, JSON.stringify(stocktakes));
-  }, [stocktakes]);
-
-  // Save to LocalStorage on changes
+  // Save Configuration & Security settings to LocalStorage (Business data is SSOT in PostgreSQL)
   useEffect(() => {
     localStorage.setItem(`${STORAGE_PREFIX}role`, role);
   }, [role]);
@@ -568,70 +547,6 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem(`${STORAGE_PREFIX}telegram_config`, JSON.stringify(telegramConfig));
   }, [telegramConfig]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}products`, JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}customers`, JSON.stringify(customers));
-  }, [customers]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}batches`, JSON.stringify(batches));
-  }, [batches]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}orders`, JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}shifts`, JSON.stringify(shifts));
-  }, [shifts]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}transactions`, JSON.stringify(transactions));
-  }, [transactions]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}alerts`, JSON.stringify(telegramAlerts));
-  }, [telegramAlerts]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}approvals`, JSON.stringify(approvalRequests));
-  }, [approvalRequests]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}employees`, JSON.stringify(employees));
-  }, [employees]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}suppliers`, JSON.stringify(suppliers));
-  }, [suppliers]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}inbounds`, JSON.stringify(inbounds));
-  }, [inbounds]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}outbounds`, JSON.stringify(outbounds));
-  }, [outbounds]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}stocktakes`, JSON.stringify(stocktakes));
-  }, [stocktakes]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}serials`, JSON.stringify(serials));
-  }, [serials]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}warranties`, JSON.stringify(warranties));
-  }, [warranties]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_PREFIX}returns`, JSON.stringify(returns));
-  }, [returns]);
 
   // POS Multi-Tab Management
   const [tabs, setTabs] = useState<POSTab[]>([
@@ -725,16 +640,14 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setRole = (newRole: UserRole) => {
     setRoleState(newRole);
-    const fallbackUser = DEFAULT_USERS[newRole] || DEFAULT_USERS.admin;
-    const updatedUser: AuthUser = {
-      ...(currentUser || fallbackUser),
-      role: newRole,
-      roleTitle: ROLE_CONFIG[newRole]?.title || newRole,
-    };
-    setCurrentUser(updatedUser);
-    localStorage.setItem(`${STORAGE_PREFIX}auth_user`, JSON.stringify(updatedUser));
+    const personaUser = DEFAULT_USERS[newRole] || DEFAULT_USERS.admin;
+    setCurrentUser(personaUser);
+    localStorage.setItem(`${STORAGE_PREFIX}auth_user`, JSON.stringify(personaUser));
     localStorage.setItem(`${STORAGE_PREFIX}role`, newRole);
-    showToast(`🔓 Đã chuyển vai trò: ${ROLE_CONFIG[newRole]?.label || newRole}`);
+    if (typeof document !== 'undefined') {
+      document.cookie = `nexus_demo_role=${newRole}; path=/; max-age=604800; SameSite=Lax`;
+    }
+    showToast(`🎭 Đã chuyển vai trò: ${ROLE_CONFIG[newRole]?.label || newRole}`);
   };
 
   const toggleRole = () => {
@@ -863,7 +776,9 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       delivered: true
     };
     setTelegramAlerts(prev => [newAlert, ...prev]);
-    showToast(`📢 Telegram Bot: ${title}`);
+    if (telegramConfig?.enabled && telegramConfig?.botToken?.trim()) {
+      showToast(`📢 Telegram Alert: ${title}`);
+    }
   };
 
   // Packaging representation helper
@@ -1205,167 +1120,150 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Inventory Inbound / Outbound / Stocktake Functions (Xuất Nhập Tồn)
-  const addInboundReceipt = (receiptData: Omit<StockInboundReceipt, 'id' | 'code'>) => {
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const counter = Math.floor(100 + Math.random() * 900);
-    const newReceipt: StockInboundReceipt = {
-      ...receiptData,
-      id: `inbound-${Date.now()}`,
-      code: `PNK-${dateStr}-${counter}`
-    };
-
-    // Update product stocks
-    setProducts(prevProducts =>
-      prevProducts.map(prod => {
-        const inboundItem = newReceipt.items.find(i => i.productId === prod.id);
-        if (inboundItem) {
-          const addedBaseQty = inboundItem.quantity * inboundItem.conversionRate;
-          return {
-            ...prod,
-            stockBaseUnits: prod.stockBaseUnits + addedBaseQty
-          };
-        }
-        return prod;
-      })
-    );
-
-    // Update supplier debt & purchase volume
-    if (newReceipt.supplierId) {
-      setSuppliers(prevSuppliers =>
-        prevSuppliers.map(s => {
-          if (s.id === newReceipt.supplierId) {
-            return {
-              ...s,
-              currentDebt: s.currentDebt + newReceipt.debtAmount,
-              totalPurchased: s.totalPurchased + newReceipt.totalCost
-            };
-          }
-          return s;
-        })
-      );
-    }
-
-    // Record cash payment transaction if paidAmount > 0
-    if (newReceipt.paidAmount > 0) {
-      const newTx: CashTransaction = {
-        id: `tx-${Date.now()}`,
-        code: `PC-${Math.floor(10000 + Math.random() * 90000)}`,
-        type: 'chi',
-        category: 'Chi tiền nhập kho hàng hóa',
-        amount: newReceipt.paidAmount,
-        date: newReceipt.date,
-        person: newReceipt.supplierName,
-        description: `Thanh toán phiếu nhập kho ${newReceipt.code}`
+  const addInboundReceipt = async (receiptData: Omit<StockInboundReceipt, 'id' | 'code'>): Promise<StockInboundReceipt | null> => {
+    try {
+      const payload = {
+        action: 'inbound',
+        ...receiptData,
+        warehouseId: activeWarehouse?.id,
       };
-      setTransactions(prev => [newTx, ...prev]);
 
-      if (newReceipt.paymentMethod === 'cash') {
-        setShifts(prev =>
-          prev.map(s => {
-            if (!s.isClosed) {
-              return {
-                ...s,
-                expectedCash: Math.max(0, s.expectedCash - newReceipt.paidAmount)
-              };
-            }
-            return s;
-          })
-        );
+      const res = await fetch('/api/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const resData = await res.json().catch(() => null);
+
+      if (!res.ok || !resData?.success) {
+        const errorMsg = resData?.error || `Lỗi máy chủ (${res.status})`;
+        showToast(`❌ Nhập kho thất bại: ${errorMsg}`);
+        return null;
       }
+
+      const serverReceipt: StockInboundReceipt = {
+        ...receiptData,
+        id: resData.data?.id || `inbound-${Date.now()}`,
+        code: resData.data?.code || `PNK-${Date.now().toString().slice(-6)}`,
+        ...(resData.data || {}),
+      };
+
+      setInbounds(prev => [serverReceipt, ...prev.filter(r => r.id !== serverReceipt.id)]);
+
+      // Pull SSOT from PostgreSQL (products, suppliers, stock balances, ledger, transactions)
+      await refreshData(false);
+      await fetchStockBalances();
+
+      showToast(`📦 Đã tạo phiếu nhập kho ${serverReceipt.code} thành công!`);
+      return serverReceipt;
+    } catch (err: any) {
+      console.error('Lỗi mạng khi lưu phiếu nhập kho:', err);
+      showToast(`❌ Lỗi kết nối khi gửi phiếu nhập kho: ${err.message || 'Không thể kết nối máy chủ'}`);
+      return null;
     }
-
-    setInbounds(prev => [newReceipt, ...prev]);
-
-    // Persist to DB
-    fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'inbound', ...receiptData }),
-    }).catch(err => console.error('Error saving inbound to DB:', err));
-
-    showToast(`📦 Đã tạo phiếu nhập kho ${newReceipt.code} thành công!`);
   };
 
-  const addOutboundReceipt = (receiptData: Omit<StockOutboundReceipt, 'id' | 'code'>) => {
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const counter = Math.floor(100 + Math.random() * 900);
-    const newReceipt: StockOutboundReceipt = {
-      ...receiptData,
-      id: `outbound-${Date.now()}`,
-      code: `PXK-${dateStr}-${counter}`
-    };
+  const addOutboundReceipt = async (receiptData: Omit<StockOutboundReceipt, 'id' | 'code'>): Promise<StockOutboundReceipt | null> => {
+    try {
+      const payload = {
+        action: 'outbound',
+        ...receiptData,
+        warehouseId: activeWarehouse?.id,
+      };
 
-    // Decrease product stocks
-    setProducts(prevProducts =>
-      prevProducts.map(prod => {
-        const outboundItem = newReceipt.items.find(i => i.productId === prod.id);
-        if (outboundItem) {
-          const removedBaseQty = outboundItem.quantity * outboundItem.conversionRate;
-          return {
-            ...prod,
-            stockBaseUnits: Math.max(0, prod.stockBaseUnits - removedBaseQty)
-          };
-        }
-        return prod;
-      })
-    );
+      const res = await fetch('/api/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    setOutbounds(prev => [newReceipt, ...prev]);
+      const resData = await res.json().catch(() => null);
 
-    // Persist to DB
-    fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'outbound', ...receiptData }),
-    }).catch(err => console.error('Error saving outbound to DB:', err));
+      if (!res.ok || !resData?.success) {
+        const errorMsg = resData?.error || `Lỗi máy chủ (${res.status})`;
+        showToast(`❌ Xuất kho thất bại: ${errorMsg}`);
+        return null;
+      }
 
-    showToast(`📤 Đã tạo phiếu xuất kho ${newReceipt.code} thành công!`);
+      const serverReceipt: StockOutboundReceipt = {
+        ...receiptData,
+        id: resData.data?.id || `outbound-${Date.now()}`,
+        code: resData.data?.code || `PXK-${Date.now().toString().slice(-6)}`,
+        ...(resData.data || {}),
+      };
+
+      setOutbounds(prev => [serverReceipt, ...prev.filter(r => r.id !== serverReceipt.id)]);
+
+      // Pull SSOT from PostgreSQL
+      await refreshData(false);
+      await fetchStockBalances();
+
+      showToast(`📤 Đã tạo phiếu xuất kho ${serverReceipt.code} thành công!`);
+      return serverReceipt;
+    } catch (err: any) {
+      console.error('Lỗi mạng khi lưu phiếu xuất kho:', err);
+      showToast(`❌ Lỗi kết nối khi gửi phiếu xuất kho: ${err.message || 'Không thể kết nối máy chủ'}`);
+      return null;
+    }
   };
 
-  const addStocktakeReport = (reportData: Omit<StocktakeReport, 'id' | 'code'>) => {
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const counter = Math.floor(100 + Math.random() * 900);
-    const newReport: StocktakeReport = {
-      ...reportData,
-      id: `stocktake-${Date.now()}`,
-      code: `PKK-${dateStr}-${counter}`
-    };
+  const addStocktakeReport = async (reportData: Omit<StocktakeReport, 'id' | 'code'>): Promise<StocktakeReport | null> => {
+    try {
+      const wh = warehouses.find(w => w.name === reportData.warehouseLocation);
+      const payload = {
+        action: 'stocktake',
+        ...reportData,
+        warehouseId: reportData.warehouseId || wh?.id || activeWarehouse?.id,
+      };
 
-    // 1. Immediately update products actual stock
-    setProducts(prev =>
-      prev.map(p => {
-        const matched = newReport.items.find(i => i.productId === p.id);
-        if (matched && typeof matched.actualStock === 'number') {
-          return {
-            ...p,
-            stockBaseUnits: matched.actualStock
-          };
-        }
-        return p;
-      })
-    );
+      const res = await fetch('/api/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    // 2. Add to stocktake reports
-    setStocktakes(prev => [newReport, ...prev]);
+      const resData = await res.json().catch(() => null);
 
-    // 3. Persist to PostgreSQL database via API
-    fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'stocktake', ...reportData }),
-    }).catch(err => console.error('Error saving stocktake report to DB:', err));
+      if (!res.ok || !resData?.success) {
+        const errorMsg = resData?.error || `Lỗi máy chủ (${res.status})`;
+        showToast(`❌ Lưu kiểm kê thất bại: ${errorMsg}`);
+        return null;
+      }
 
-    showToast(`📋 Đã lưu & cân bằng số liệu kiểm kê kho ${newReport.code}`);
+      const serverReport: StocktakeReport = {
+        ...reportData,
+        id: resData.data?.id || `stocktake-${Date.now()}`,
+        code: resData.data?.code || `PKK-${Date.now().toString().slice(-6)}`,
+        status: resData.data?.status || 'balanced',
+        balancedAt: resData.data?.balancedAt || new Date().toISOString().slice(0, 16).replace('T', ' '),
+        ...(resData.data || {}),
+      };
+
+      setStocktakes(prev => [serverReport, ...prev.filter(r => r.id !== serverReport.id)]);
+
+      await refreshData(false);
+      await fetchStockBalances();
+
+      showToast(`📋 Đã lưu & cân bằng số liệu kiểm kê kho ${serverReport.code}`);
+      return serverReport;
+    } catch (err: any) {
+      console.error('Lỗi khi lưu kiểm kê kho:', err);
+      showToast(`❌ Lỗi kết nối khi lưu kiểm kê: ${err.message || 'Mất kết nối máy chủ'}`);
+      return null;
+    }
   };
 
-  const reconcileStocktake = (items: { productId: string; actualStock: number }[]) => {
+  const reconcileStocktake = (items: { productId: string; actualStock: number; systemStock?: number }[]) => {
     setProducts(prev =>
       prev.map(p => {
         const matched = items.find(i => i.productId === p.id);
         if (matched) {
+          const sysStock = typeof matched.systemStock === 'number' ? matched.systemStock : p.stockBaseUnits;
+          const delta = matched.actualStock - sysStock;
           return {
             ...p,
-            stockBaseUnits: matched.actualStock
+            stockBaseUnits: Math.max(0, p.stockBaseUnits + delta)
           };
         }
         return p;
@@ -1375,67 +1273,86 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Warehouse Transfer Operations (Chuyển kho nội bộ)
-  const addWarehouseTransfer = (transferData: Omit<WarehouseTransfer, 'id' | 'code'>) => {
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const counter = Math.floor(100 + Math.random() * 900);
-    const newTransfer: WarehouseTransfer = {
-      ...transferData,
-      id: `tr-${Date.now()}`,
-      code: `CK-${dateStr}-${counter}`,
-      status: transferData.status || 'in_transit',
-      shippedAt: new Date().toISOString().slice(0, 16).replace('T', ' ')
-    };
+  const addWarehouseTransfer = async (transferData: Omit<WarehouseTransfer, 'id' | 'code'>): Promise<WarehouseTransfer | null> => {
+    try {
+      const srcWh = warehouses.find(w => w.name === transferData.sourceWarehouse);
+      const tgtWh = warehouses.find(w => w.name === transferData.targetWarehouse);
 
-    // Deduct stock from source products
-    setProducts(prevProducts =>
-      prevProducts.map(prod => {
-        const trItem = newTransfer.items.find(i => i.productId === prod.id);
-        if (trItem) {
-          const deductBaseQty = trItem.quantity * trItem.conversionRate;
-          return {
-            ...prod,
-            stockBaseUnits: Math.max(0, prod.stockBaseUnits - deductBaseQty)
-          };
-        }
-        return prod;
-      })
-    );
+      const payload = {
+        action: 'transfer',
+        ...transferData,
+        sourceWarehouseId: transferData.sourceWarehouseId || srcWh?.id,
+        targetWarehouseId: transferData.targetWarehouseId || tgtWh?.id,
+      };
 
-    setTransfers(prev => [newTransfer, ...prev]);
+      const res = await fetch('/api/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'transfer', ...transferData }),
-    }).catch(err => console.error('Error saving transfer to DB:', err));
+      const resData = await res.json().catch(() => null);
 
-    showToast(`🚚 Đã tạo phiếu chuyển kho ${newTransfer.code} thành công!`);
+      if (!res.ok || !resData?.success) {
+        const errorMsg = resData?.error || `Lỗi máy chủ (${res.status})`;
+        showToast(`❌ Chuyển kho thất bại: ${errorMsg}`);
+        return null;
+      }
+
+      const serverTransfer: WarehouseTransfer = {
+        ...transferData,
+        id: resData.data?.id || `tr-${Date.now()}`,
+        code: resData.data?.code || `CK-${Date.now().toString().slice(-6)}`,
+        status: resData.data?.status || transferData.status || 'in_transit',
+        shippedAt: resData.data?.shippedAt || new Date().toISOString().slice(0, 16).replace('T', ' '),
+        ...(resData.data || {}),
+      };
+
+      setTransfers(prev => [serverTransfer, ...prev.filter(t => t.id !== serverTransfer.id)]);
+
+      await refreshData(false);
+      await fetchStockBalances();
+
+      showToast(`🚚 Đã tạo phiếu chuyển kho ${serverTransfer.code} thành công!`);
+      return serverTransfer;
+    } catch (err: any) {
+      console.error('Lỗi khi gửi phiếu chuyển kho:', err);
+      showToast(`❌ Lỗi kết nối khi gửi phiếu chuyển kho: ${err.message || 'Mất kết nối máy chủ'}`);
+      return null;
+    }
   };
 
-  const updateTransferStatus = (transferId: string, status: WarehouseTransfer['status'], receiverName?: string) => {
-    const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
-    setTransfers(prev =>
-      prev.map(t => {
-        if (t.id === transferId) {
-          return {
-            ...t,
-            status,
-            receiverName: receiverName || t.receiverName,
-            receivedAt: status === 'completed' ? nowStr : t.receivedAt,
-            shippedAt: status === 'in_transit' ? nowStr : t.shippedAt
-          };
-        }
-        return t;
-      })
-    );
+  const updateTransferStatus = async (
+    transferId: string,
+    status: WarehouseTransfer['status'],
+    receiverName?: string
+  ): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_transfer_status', transferId, status, receiverName }),
+      });
 
-    fetch('/api/inventory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_transfer_status', transferId, status, receiverName }),
-    }).catch(err => console.error('Error updating transfer status:', err));
+      const resData = await res.json().catch(() => null);
 
-    showToast(`✅ Đã cập nhật trạng thái phiếu chuyển kho sang "${status === 'completed' ? 'Đã nhận kho' : status === 'in_transit' ? 'Đang vận chuyển' : status}"`);
+      if (!res.ok || !resData?.success) {
+        const errorMsg = resData?.error || `Lỗi máy chủ (${res.status})`;
+        showToast(`❌ Cập nhật chuyển kho thất bại: ${errorMsg}`);
+        return false;
+      }
+
+      await refreshData(false);
+      await fetchStockBalances();
+
+      const statusLabel = status === 'completed' ? 'Đã nhận kho' : status === 'in_transit' ? 'Đang vận chuyển' : status;
+      showToast(`✅ Đã cập nhật trạng thái phiếu chuyển kho sang "${statusLabel}"`);
+      return true;
+    } catch (err: any) {
+      console.error('Lỗi cập nhật trạng thái chuyển kho:', err);
+      showToast(`❌ Lỗi kết nối khi cập nhật: ${err.message || 'Mất kết nối máy chủ'}`);
+      return false;
+    }
   };
 
   const addBatch = (batchData: ProductBatch) => {
@@ -2060,7 +1977,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  const addItemToTab = (tabId: string, product: Product, unitName?: string) => {
+  const addItemToTab = (tabId: string, product: Product, unitName?: string, serialNumbers?: string[]) => {
     setTabs(prev =>
       prev.map(t => {
         if (t.id !== tabId) return t;
@@ -2086,13 +2003,19 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         let newItems = [...t.items];
         if (existingIdx >= 0) {
           const existing = newItems[existingIdx];
-          const newQty = existing.quantity + 1;
+          const newQty = serialNumbers?.length ? existing.quantity + serialNumbers.length : existing.quantity + 1;
+          const mergedSerials = serialNumbers
+            ? Array.from(new Set([...(existing.serialNumbers || []), ...serialNumbers]))
+            : existing.serialNumbers;
+
           newItems[existingIdx] = {
             ...existing,
             quantity: newQty,
+            serialNumbers: mergedSerials,
             totalPrice: existing.unitPrice * newQty * (1 - existing.discountPercent / 100)
           };
         } else {
+          const qty = serialNumbers?.length ? serialNumbers.length : 1;
           newItems.push({
             productId: product.id,
             sku: product.sku,
@@ -2100,11 +2023,12 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             category: product.category,
             selectedUnit: chosenUnit.name,
             conversionRate: chosenUnit.conversionRate,
-            quantity: 1,
+            quantity: qty,
             unitPrice,
             costPricePerUnit,
-            totalPrice: unitPrice,
-            discountPercent: 0
+            totalPrice: unitPrice * qty,
+            discountPercent: 0,
+            serialNumbers: serialNumbers || []
           });
         }
 
@@ -2115,6 +2039,35 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...t,
           items: newItems,
           paidAmount: total // default to full payment
+        });
+      })
+    );
+  };
+
+  const updateCartItemSerials = (tabId: string, productId: string, unitName: string, serialNumbers: string[]) => {
+    setTabs(prev =>
+      prev.map(t => {
+        if (t.id !== tabId) return t;
+        const newItems = t.items.map(it => {
+          if (it.productId === productId && it.selectedUnit === unitName) {
+            const newQty = Math.max(1, serialNumbers.length);
+            return {
+              ...it,
+              serialNumbers,
+              quantity: newQty,
+              totalPrice: it.unitPrice * newQty * (1 - it.discountPercent / 100)
+            };
+          }
+          return it;
+        });
+
+        const subtotal = newItems.reduce((s, it) => s + it.totalPrice, 0);
+        const total = Math.max(0, subtotal - t.discountAmount + t.shippingFee);
+
+        return checkTabRules({
+          ...t,
+          items: newItems,
+          paidAmount: total
         });
       })
     );
@@ -2295,8 +2248,218 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTabs(prev => prev.map(t => (t.id === tabId ? { ...t, notes } : t)));
   };
 
-  // Checkout order
-  const checkoutTab = (tabId: string, paymentMethod: PaymentMethod): Order | null => {
+  // Helper to reset a POS tab
+  const resetTabById = (tabId: string) => {
+    setTabs(prev =>
+      prev.map(t => {
+        if (t.id === tabId) {
+          return {
+            ...t,
+            items: [],
+            discountAmount: 0,
+            shippingFee: 0,
+            paidAmount: 0,
+            notes: '',
+            requiresManagerPin: false,
+            pinOverrideGranted: false,
+            requiresCreditApproval: false,
+            creditApprovalGranted: false
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  // Helper for post-checkout side-effects (serials, warranties, alerts)
+  const handlePostCheckoutSideEffects = (
+    order: Order,
+    tab: POSTab,
+    cust: Customer | undefined,
+    debtAmount: number
+  ) => {
+    // 1. Update serials status to sold and register timeline
+    const soldSerialNumbers: string[] = [];
+    tab.items.forEach(it => {
+      if (it.serialNumbers && it.serialNumbers.length > 0) {
+        soldSerialNumbers.push(...it.serialNumbers);
+      }
+    });
+
+    if (soldSerialNumbers.length > 0) {
+      setSerials(prev =>
+        prev.map(s => {
+          if (soldSerialNumbers.includes(s.serialNumber)) {
+            return {
+              ...s,
+              status: 'sold' as const,
+              customerId: tab.customerId,
+              orderId: order.id,
+              timeline: [
+                ...(s.timeline || []),
+                {
+                  id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                  timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
+                  action: 'sold' as const,
+                  description: `Bán lẻ/phân phối theo đơn ${order.code} cho ${cust ? cust.name : 'Khách lẻ'}`,
+                  referenceCode: order.code
+                }
+              ]
+            };
+          }
+          return s;
+        })
+      );
+    }
+
+    // 2. Auto-generate Electronic Warranty Tickets for Serialized/Electronic items
+    tab.items.forEach(it => {
+      const prod = products.find(p => p.id === it.productId);
+      const isElectronicOrSerial = prod?.hasSerial || prod?.category === 'Điện Máy' || (it.serialNumbers && it.serialNumbers.length > 0);
+      if (isElectronicOrSerial && prod) {
+        const serialsList = it.serialNumbers && it.serialNumbers.length > 0
+          ? it.serialNumbers
+          : [`SN-${prod.sku.replace(/[^A-Z0-9]/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`];
+
+        serialsList.forEach(sn => {
+          const durationMonths = prod.category === 'Điện Máy' ? 24 : 12;
+          const returnDate = new Date();
+          returnDate.setMonth(returnDate.getMonth() + durationMonths);
+
+          const warrantyTicket: WarrantyTicket = {
+            id: `war-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            code: `BH-${order.code.replace('DH-', '')}-${sn.slice(-4)}`,
+            customerId: tab.customerId,
+            customerName: cust ? cust.name : 'Khách lẻ trực tiếp',
+            customerPhone: cust ? cust.phone : '0900.000.000',
+            productId: prod.id,
+            productName: prod.name,
+            sku: prod.sku,
+            serialNumber: sn,
+            orderCode: order.code,
+            issueDescription: 'Kích hoạt Bảo hành Điện tử Chính hãng tự động khi xuất hóa đơn POS',
+            accessoriesAttached: 'Nguyên hộp, thân máy, phiếu bàn giao hóa đơn',
+            technicianName: 'Bộ Phận Kỹ Thuật & Bảo Hành NEXUS',
+            receivedDate: new Date().toISOString().slice(0, 10),
+            status: 'receiving',
+            isUnderWarranty: true,
+            repairCost: 0,
+            sparePartsCost: 0,
+            totalCost: 0,
+            notes: `Thời hạn bảo hành ${durationMonths} tháng. Hết hạn ngày: ${returnDate.toISOString().slice(0, 10)}. Hỗ trợ 1 đổi 1 trong 30 ngày đầu.`,
+            serviceRecords: [
+              {
+                id: `rec-${Date.now()}`,
+                date: new Date().toISOString().slice(0, 10),
+                technicianName: 'Hệ thống Quản Trị NEXUS ERP',
+                action: `Kích hoạt bảo hành điện tử chính hãng (${durationMonths} tháng)`,
+                cost: 0,
+                notes: `Kiểm tra xuất xưởng và xuất hóa đơn ${order.code} thành công`
+              }
+            ]
+          };
+
+          setWarranties(prev => [warrantyTicket, ...prev]);
+        });
+      }
+    });
+
+    // 3. Telegram low-stock alert
+    tab.items.forEach(it => {
+      const prod = products.find(p => p.id === it.productId);
+      if (prod) {
+        const itemDeduction = it.quantity * it.conversionRate;
+        const remaining = Math.max(0, prod.stockBaseUnits - itemDeduction);
+        if (remaining <= prod.minStockAlert) {
+          dispatchTelegramAlert(
+            'low_stock',
+            '🚨 CẢNH BÁO TỒN KHO AN TOÀN',
+            `Sản phẩm: ${prod.name} vừa xuất kho ${itemDeduction} ${prod.baseUnit}. Tồn thực tế còn: ${remaining} ${prod.baseUnit} (Chạm mức an toàn ${prod.minStockAlert}).`
+          );
+        }
+      }
+    });
+
+    // 4. Telegram credit limit alert
+    if (cust && debtAmount > 0) {
+      const newDebt = (cust.currentDebt || 0) + debtAmount;
+      if (cust.creditLimit && newDebt > cust.creditLimit) {
+        dispatchTelegramAlert(
+          'credit_limit',
+          '⚠️ CÔNG NỢ VƯỢT HẠN MỨC',
+          `Khách hàng: ${cust.name} vừa ghi nợ thêm ${debtAmount.toLocaleString('vi-VN')} đ theo đơn ${order.code}. Tổng dư nợ: ${newDebt.toLocaleString('vi-VN')} đ (Vượt hạn mức ${cust.creditLimit.toLocaleString('vi-VN')} đ).`
+        );
+      }
+    }
+  };
+
+  // Helper for optimistic state mutations in offline mode
+  const applyOfflineOptimisticUpdates = (
+    order: Order,
+    tab: POSTab,
+    cust: Customer | undefined,
+    paidAmount: number,
+    debtAmount: number,
+    paymentMethod: PaymentMethod
+  ) => {
+    setProducts(prevProds => {
+      return prevProds.map(p => {
+        const itemDeduction = tab.items
+          .filter(it => it.productId === p.id)
+          .reduce((sum, it) => sum + it.quantity * it.conversionRate, 0);
+
+        if (itemDeduction > 0) {
+          return {
+            ...p,
+            stockBaseUnits: Math.max(0, p.stockBaseUnits - itemDeduction)
+          };
+        }
+        return p;
+      });
+    });
+
+    if (cust && debtAmount > 0) {
+      setCustomers(prev =>
+        prev.map(c => {
+          if (c.id === cust.id) {
+            return {
+              ...c,
+              currentDebt: c.currentDebt + debtAmount,
+              debtAging: {
+                ...c.debtAging,
+                within30: c.debtAging.within30 + debtAmount
+              }
+            };
+          }
+          return c;
+        })
+      );
+    }
+
+    setShifts(prevShifts => {
+      return prevShifts.map(s => {
+        if (!s.isClosed) {
+          const cashAddition = paymentMethod === 'cash' ? paidAmount : 0;
+          const qrAddition = paymentMethod === 'vietqr' ? paidAmount : 0;
+          const debtAddition = debtAmount;
+          return {
+            ...s,
+            cashSales: s.cashSales + cashAddition,
+            vietQrSales: s.vietQrSales + qrAddition,
+            debtSales: s.debtSales + debtAddition,
+            expectedCash: s.expectedCash + cashAddition
+          };
+        }
+        return s;
+      });
+    });
+
+    setOrders(prev => [order, ...prev]);
+    handlePostCheckoutSideEffects(order, tab, cust, debtAmount);
+  };
+
+  // Checkout order: Await API -> Fail rollback/toast -> Success refreshData(false)
+  const checkoutTab = async (tabId: string, paymentMethod: PaymentMethod): Promise<Order | null> => {
     const tab = tabs.find(t => t.id === tabId);
     if (!tab || tab.items.length === 0) return null;
 
@@ -2338,118 +2501,116 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       hasPinOverride: tab.pinOverrideGranted
     };
 
-    // Deduct stock in base units
-    setProducts(prevProds => {
-      return prevProds.map(p => {
-        const itemDeduction = tab.items
-          .filter(it => it.productId === p.id)
-          .reduce((sum, it) => sum + it.quantity * it.conversionRate, 0);
+    // Order payload with effective warehouse and branch
+    const orderPayload = {
+      ...newOrder,
+      warehouseId: activeWarehouse?.id,
+      branchId: activeWarehouse?.branchId || activeBranch?.id,
+    };
 
-        if (itemDeduction > 0) {
-          const remaining = Math.max(0, p.stockBaseUnits - itemDeduction);
-          if (remaining <= p.minStockAlert) {
-            dispatchTelegramAlert(
-              'low_stock',
-              '🚨 CẢNH BÁO TỒN KHO AN TOÀN',
-              `Sản phẩm: ${p.name} vừa xuất kho ${itemDeduction} ${p.baseUnit}. Tồn thực tế còn: ${remaining} ${p.baseUnit} (Chạm mức an toàn ${p.minStockAlert}).`
-            );
-          }
-          return {
-            ...p,
-            stockBaseUnits: remaining
-          };
-        }
-        return p;
-      });
-    });
+    const isDeviceOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
-    // Update customer debt if any
-    if (cust && debtAmount > 0) {
-      const updatedCust: Customer = {
-        ...cust,
-        currentDebt: cust.currentDebt + debtAmount,
-        debtAging: {
-          ...cust.debtAging,
-          within30: cust.debtAging.within30 + debtAmount
-        }
-      };
-      updateCustomer(updatedCust);
-
-      if (updatedCust.currentDebt > updatedCust.creditLimit) {
-        dispatchTelegramAlert(
-          'credit_limit',
-          '⚠️ CÔNG NỢ VƯỢT HẠN MỨC',
-          `Khách hàng: ${cust.name} vừa ghi nợ thêm ${debtAmount.toLocaleString('vi-VN')} đ theo đơn ${newOrder.code}. Tổng dư nợ: ${updatedCust.currentDebt.toLocaleString('vi-VN')} đ (Vượt hạn mức ${updatedCust.creditLimit.toLocaleString('vi-VN')} đ).`
-        );
+    if (isDeviceOffline) {
+      // 1. Offline Mode: Enqueue directly into Dexie IndexedDB
+      try {
+        await offlineDB.offlineOrders.add({
+          clientOrderId: newOrder.id,
+          customerName: newOrder.customerName,
+          customerPhone: newOrder.customerPhone,
+          deliveryAddress: cust?.address || 'Tại quầy POS',
+          items: newOrder.items.map(it => ({
+            productId: it.productId,
+            productName: it.name,
+            viscosity: '',
+            volume: it.selectedUnit,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice
+          })),
+          totalAmount: newOrder.totalAmount,
+          notes: newOrder.notes,
+          createdAt: newOrder.createdAt,
+          syncStatus: 'PENDING',
+          payload: orderPayload
+        });
+        showToast(`📶 [Chế độ Offline] Đơn hàng ${newOrder.code} đã lưu vào IndexedDB! Sẽ tự động sync khi có mạng.`);
+      } catch (err) {
+        console.warn('Lỗi lưu đơn offline vào Dexie:', err);
       }
+
+      applyOfflineOptimisticUpdates(newOrder, tab, cust, paidAmount, debtAmount, paymentMethod);
+      resetTabById(tabId);
+      return newOrder;
     }
 
-    // Update shift cash totals
-    setShifts(prevShifts => {
-      return prevShifts.map(s => {
-        if (!s.isClosed) {
-          const cashAddition = paymentMethod === 'cash' ? paidAmount : 0;
-          const qrAddition = paymentMethod === 'vietqr' ? paidAmount : 0;
-          const debtAddition = debtAmount;
-          return {
-            ...s,
-            cashSales: s.cashSales + cashAddition,
-            vietQrSales: s.vietQrSales + qrAddition,
-            debtSales: s.debtSales + debtAddition,
-            expectedCash: s.expectedCash + cashAddition
-          };
-        }
-        return s;
+    // 2. Online Mode: Await API -> Fail rollback/toast -> Success refreshData(false)
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderPayload),
       });
-    });
 
-    // Add order to orders list
-    setOrders(prev => [newOrder, ...prev]);
+      const resData = await res.json().catch(() => null);
 
-    // Persist order to PostgreSQL with effective warehouse and branch
-    fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      if (!res.ok || !resData?.success) {
+        const errorMsg = resData?.error || `Lỗi máy chủ (${res.status})`;
+        showToast(`❌ Thanh toán thất bại: ${errorMsg}`);
+        // Rollback / No mutation: Tab items preserved, no phantom deduction
+        return null;
+      }
+
+      const serverOrder: Order = {
         ...newOrder,
-        warehouseId: activeWarehouse?.id,
-        branchId: activeWarehouse?.branchId || activeBranch?.id,
-      }),
-    })
-      .then(res => res.json())
-      .then(resData => {
-        if (resData.success && resData.data) {
-          setOrders(prev =>
-            prev.map(o => (o.id === newOrder.id ? { ...o, id: resData.data.id, code: resData.data.code } : o))
-          );
-          fetchStockBalances();
-        }
-      })
-      .catch(err => console.error('Error persisting order to DB:', err));
+        ...(resData.data || {}),
+      };
 
-    // Reset current tab
-    setTabs(prev =>
-      prev.map(t => {
-        if (t.id === tabId) {
-          return {
-            ...t,
-            items: [],
-            discountAmount: 0,
-            shippingFee: 0,
-            paidAmount: 0,
-            notes: '',
-            requiresManagerPin: false,
-            pinOverrideGranted: false,
-            requiresCreditApproval: false,
-            creditApprovalGranted: false
-          };
-        }
-        return t;
-      })
-    );
+      // Add to orders list
+      setOrders(prev => [serverOrder, ...prev.filter(o => o.id !== serverOrder.id)]);
 
-    showToast(`🎉 Đã xuất thành công đơn hàng: ${newOrder.code}`);
-    return newOrder;
+      // Execute side effects (warranty tickets, serial history, telegram alerts)
+      handlePostCheckoutSideEffects(serverOrder, tab, cust, debtAmount);
+
+      // Revalidate PostgreSQL SSOT (tồn kho, công nợ khách hàng, số dư ca thu ngân)
+      await refreshData(false);
+      fetchStockBalances();
+
+      // Reset current POS tab only after success
+      resetTabById(tabId);
+
+      showToast(`🎉 Đã xuất thành công đơn hàng: ${serverOrder.code}`);
+      return serverOrder;
+    } catch (err) {
+      console.warn('Lỗi mạng khi lưu đơn lên server, tự động đưa vào hàng đợi Offline IndexedDB:', err);
+      try {
+        await offlineDB.offlineOrders.add({
+          clientOrderId: newOrder.id,
+          customerName: newOrder.customerName,
+          customerPhone: newOrder.customerPhone,
+          deliveryAddress: cust?.address || 'Tại quầy POS',
+          items: newOrder.items.map(it => ({
+            productId: it.productId,
+            productName: it.name,
+            viscosity: '',
+            volume: it.selectedUnit,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice
+          })),
+          totalAmount: newOrder.totalAmount,
+          notes: newOrder.notes,
+          createdAt: newOrder.createdAt,
+          syncStatus: 'PENDING',
+          payload: orderPayload
+        });
+        showToast(`⚠️ [Mất mạng] Đơn hàng ${newOrder.code} đã được đưa vào hàng đợi Offline chờ đồng bộ!`);
+
+        applyOfflineOptimisticUpdates(newOrder, tab, cust, paidAmount, debtAmount, paymentMethod);
+        resetTabById(tabId);
+        return newOrder;
+      } catch (offlineErr) {
+        showToast('❌ Mất kết nối mạng và không thể lưu ngoại tuyến. Vui lòng thử lại!');
+        return null;
+      }
+    }
   };
 
   const updateOrderStatus = (orderId: string, status: Order['status']) => {
@@ -2787,6 +2948,22 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const grantCreditApprovalForTab = (tabId: string, note = 'Quản lý duyệt trực tiếp') => {
+    setTabs(prev =>
+      prev.map(t => {
+        if (t.id === tabId) {
+          return {
+            ...t,
+            creditApprovalGranted: true,
+            requiresCreditApproval: false
+          };
+        }
+        return t;
+      })
+    );
+    showToast(`🟢 Quản lý đã duyệt ngoại lệ hạn mức cho đơn hàng! (${note})`);
+  };
+
   const addApprovalMessage = (requestId: string, text: string) => {
     setApprovalRequests(prev =>
       prev.map(r => {
@@ -2818,7 +2995,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPrintModal(prev => ({ ...prev, isOpen: false }));
   };
 
-  const openVietQrModal = (amount: number, orderCode: string, customerName?: string, onSuccess?: () => void) => {
+  const openVietQrModal = (amount: number, orderCode: string, customerName?: string, onSuccess?: () => void | Promise<void>) => {
     setVietQrModal({ isOpen: true, amount, orderCode, customerName, onSuccess });
   };
 
@@ -2859,30 +3036,30 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setScannerModal(prev => ({ ...prev, isOpen: false }));
   };
 
-  const resetAllData = () => {
+  const resetAllData = async () => {
     localStorage.clear();
-    setProducts(INITIAL_PRODUCTS);
-    setCustomers(INITIAL_CUSTOMERS);
-    setOrders(INITIAL_ORDERS);
-    setShifts(INITIAL_SHIFTS);
-    setTransactions(INITIAL_TRANSACTIONS);
-    setTelegramAlerts(INITIAL_ALERTS);
-    setApprovalRequests(INITIAL_APPROVALS);
-    setEmployees(INITIAL_EMPLOYEES);
-    setSuppliers(INITIAL_SUPPLIERS);
-    setInbounds(INITIAL_INBOUNDS);
-    setOutbounds(INITIAL_OUTBOUNDS);
-    setStocktakes([]);
-    setReturns(INITIAL_RETURNS);
-    setSerials(INITIAL_SERIALS);
-    setWarranties(INITIAL_WARRANTIES);
-    setChatMessages(INITIAL_CHAT_MESSAGES);
     setReadMessageIds({});
     localStorage.removeItem(`${STORAGE_PREFIX}chat_messages_v1`);
     localStorage.removeItem(`${STORAGE_PREFIX}chat_read_ids`);
     setRoleState('admin');
-    refreshData();
-    showToast('🔄 Đã làm mới và đồng bộ dữ liệu từ Cơ sở dữ liệu!');
+    await refreshData(true);
+    showToast('🔄 Đã làm mới và đồng bộ lại toàn bộ dữ liệu từ Cơ sở dữ liệu PostgreSQL!');
+  };
+
+  const seedDatabase = async () => {
+    try {
+      showToast('🌱 Đang khởi tạo dữ liệu mẫu vào PostgreSQL Supabase...');
+      const res = await fetch('/api/seed', { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        await refreshData(true);
+        showToast('✅ Đã nạp thành công dữ liệu mẫu vào PostgreSQL!');
+      } else {
+        showToast(`❌ Lỗi khởi tạo: ${json.error || 'Thất bại'}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ Lỗi kết nối khi khởi tạo: ${err.message}`);
+    }
   };
 
   // INTERNAL CHATBOX SEED & STATE
@@ -2933,10 +3110,10 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       senderId: 'usr_warehouse_01',
       senderName: 'Trần Văn Tuấn',
       senderRole: 'warehouse',
-      content: 'Đã hoàn tất nhập kho 50 thùng Dầu Nhớt Castrol từ Nhà cung cấp Castrol Việt Nam.',
+      content: 'Đã hoàn tất nhập kho 20 chiếc Smart Tivi Samsung 43 inch từ Nhà phân phối Samsung Vina.',
       timestamp: '09:30',
       attachments: [
-        { type: 'product', title: 'Dầu Nhớt Castrol Power1', code: 'SP-004' },
+        { type: 'product', title: 'Smart Tivi Samsung 43 inch (43CU8000)', code: 'DM-SAM-43CU8000' },
       ],
     },
     {
@@ -2955,21 +3132,47 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [activeChatChannelId, setActiveChatChannelId] = useState<string>('general');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}chat_messages_v1`);
-    return saved ? JSON.parse(saved) : INITIAL_CHAT_MESSAGES;
+    if (typeof window === 'undefined') return INITIAL_CHAT_MESSAGES;
+    try {
+      const saved = localStorage.getItem(`${STORAGE_PREFIX}chat_messages_v1`);
+      return saved ? JSON.parse(saved) : INITIAL_CHAT_MESSAGES;
+    } catch {
+      return INITIAL_CHAT_MESSAGES;
+    }
   });
   const [readMessageIds, setReadMessageIds] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}chat_read_ids`);
-    return saved
-      ? JSON.parse(saved)
-      : {
-          'msg-seed-1': true,
-          'msg-seed-2': true,
-          'msg-seed-3': true,
-          'msg-seed-4': true,
-          'msg-seed-5': true,
-          'msg-seed-6': true,
-        };
+    if (typeof window === 'undefined') {
+      return {
+        'msg-seed-1': true,
+        'msg-seed-2': true,
+        'msg-seed-3': true,
+        'msg-seed-4': true,
+        'msg-seed-5': true,
+        'msg-seed-6': true,
+      };
+    }
+    try {
+      const saved = localStorage.getItem(`${STORAGE_PREFIX}chat_read_ids`);
+      return saved
+        ? JSON.parse(saved)
+        : {
+            'msg-seed-1': true,
+            'msg-seed-2': true,
+            'msg-seed-3': true,
+            'msg-seed-4': true,
+            'msg-seed-5': true,
+            'msg-seed-6': true,
+          };
+    } catch {
+      return {
+        'msg-seed-1': true,
+        'msg-seed-2': true,
+        'msg-seed-3': true,
+        'msg-seed-4': true,
+        'msg-seed-5': true,
+        'msg-seed-6': true,
+      };
+    }
   });
 
   const unreadChatCount = chatMessages.filter(
@@ -2984,7 +3187,13 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .forEach((m) => {
           updated[m.id] = true;
         });
-      localStorage.setItem(`${STORAGE_PREFIX}chat_read_ids`, JSON.stringify(updated));
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`${STORAGE_PREFIX}chat_read_ids`, JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+      }
       return updated;
     });
   }, [chatMessages]);
@@ -3161,6 +3370,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setTabCustomer,
         setTabTierPrice,
         addItemToTab,
+        updateCartItemSerials,
         updateCartItemQty,
         updateCartItemPrice,
         updateCartItemUnit,
@@ -3183,6 +3393,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         approvalRequests,
         createCreditApprovalRequest,
         resolveCreditApproval,
+        grantCreditApprovalForTab,
         addApprovalMessage,
         printModal,
         openPrintModal,
@@ -3206,6 +3417,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         bankConfig,
         setBankConfig,
         resetAllData,
+        seedDatabase,
         activeToast,
         showToast,
         chatMessages,

@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Product, CartItem, TierPriceType } from '../../types/erp';
+import { Product, CartItem, TierPriceType, Customer } from '../../types/erp';
 import { Pagination } from '../common/Pagination';
 import { MoneyInput } from '../common/MoneyInput';
 import {
@@ -23,16 +23,22 @@ import {
   Printer,
   ChevronDown,
   ShieldAlert,
+  ShieldCheck,
+  Loader2,
   Send,
   ShoppingCart,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
+  Cpu,
+  Tag,
+  AlertCircle
 } from 'lucide-react';
 
 export const POSView: React.FC = () => {
   const {
     products,
     customers,
+    serials,
     tabs,
     activeTabId,
     setActiveTabId,
@@ -41,6 +47,7 @@ export const POSView: React.FC = () => {
     setTabCustomer,
     setTabTierPrice,
     addItemToTab,
+    updateCartItemSerials,
     updateCartItemQty,
     updateCartItemPrice,
     updateCartItemUnit,
@@ -55,6 +62,8 @@ export const POSView: React.FC = () => {
     openScannerModal,
     openPrintModal,
     createCreditApprovalRequest,
+    grantCreditApprovalForTab,
+    approvalRequests,
     getConvertedStockText,
     canViewCosts,
     showToast
@@ -64,25 +73,67 @@ export const POSView: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('Tất Cả');
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
+  // Serial Selection Modal State
+  const [serialPickerItem, setSerialPickerItem] = useState<{
+    product: Product;
+    unitName?: string;
+    existingSerials: string[];
+    isEditingCartItem?: boolean;
+  } | null>(null);
+  const [selectedSerialNums, setSelectedSerialNums] = useState<string[]>([]);
+  const [customSerialInput, setCustomSerialInput] = useState('');
+
   // Mobile responsive view toggle
   const [mobileTab, setMobileTab] = useState<'catalog' | 'cart'>('catalog');
 
   // Product Catalog Pagination state
   const [posPage, setPosPage] = useState(1);
   const [posPageSize, setPosPageSize] = useState(9);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
-  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
-  const currentCustomer = customers.find(c => c.id === activeTab.customerId) || customers[0];
+  const fallbackGuestCustomer: Customer = {
+    id: 'cust-guest',
+    code: 'KH-000',
+    name: 'Khách Lẻ Mua Trực Tiếp',
+    phone: '0900.000.000',
+    address: 'Tại quầy',
+    tier: 'dong',
+    creditLimit: 0,
+    currentDebt: 0,
+    debtAging: { within30: 0, days31to60: 0, days61to90: 0, over90: 0 }
+  };
+
+  const activeTab = (tabs && tabs.length > 0)
+    ? (tabs.find(t => t.id === activeTabId) || tabs[0])
+    : {
+        id: 'tab-default',
+        name: 'Đơn 1',
+        customerId: 'cust-guest',
+        tierPrice: 'retail' as const,
+        items: [],
+        discountAmount: 0,
+        shippingFee: 0,
+        paidAmount: 0,
+        notes: '',
+        requiresManagerPin: false,
+        pinOverrideGranted: false,
+        requiresCreditApproval: false,
+        creditApprovalGranted: false,
+      };
+
+  const currentCustomer: Customer = (customers && customers.length > 0)
+    ? (customers.find(c => c.id === activeTab?.customerId) || customers[0] || fallbackGuestCustomer)
+    : fallbackGuestCustomer;
 
   const categories = ['Tất Cả', 'Điện Máy', 'Gia Dụng', 'Hóa Mỹ Phẩm', 'Vật Liệu'];
 
   // Filter products by category and search
-  const filteredProducts = products.filter(prod => {
+  const filteredProducts = (products || []).filter(prod => {
     const matchCat = selectedCategory === 'Tất Cả' || prod.category === selectedCategory;
     const matchSearch =
       prod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       prod.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      prod.barcode.includes(searchQuery);
+      (prod.barcode && prod.barcode.includes(searchQuery));
     return matchCat && matchSearch;
   });
 
@@ -94,15 +145,82 @@ export const POSView: React.FC = () => {
   );
 
   // Calculate Subtotal & Totals
-  const subtotal = activeTab.items.reduce((sum, item) => sum + item.totalPrice, 0);
-  const totalAmount = Math.max(0, subtotal - activeTab.discountAmount + activeTab.shippingFee);
-  const remainingDebt = Math.max(0, totalAmount - activeTab.paidAmount);
+  const subtotal = (activeTab?.items || []).reduce((sum, item) => sum + item.totalPrice, 0);
+  const totalAmount = Math.max(0, subtotal - (activeTab?.discountAmount || 0) + (activeTab?.shippingFee || 0));
+  const remainingDebt = Math.max(0, totalAmount - (activeTab?.paidAmount || 0));
+
+  // Wholesale / VIP savings calculation
+  const retailSubtotal = (activeTab?.items || []).reduce((sum, item) => {
+    const prod = products.find(p => p.id === item.productId);
+    if (!prod) return sum + item.totalPrice;
+    const unit = prod.units.find(u => u.name === item.selectedUnit) || prod.units[0];
+    return sum + (unit.priceRetail * item.quantity * (1 - item.discountPercent / 100));
+  }, 0);
+  const wholesaleSavings = Math.max(0, retailSubtotal - subtotal);
+
+  // Serial Selection Triggers
+  const handleProductClick = (prod: Product) => {
+    if (prod.hasSerial) {
+      const available = serials
+        .filter(s => (s.productId === prod.id || s.sku === prod.sku) && s.status === 'in_stock')
+        .map(s => s.serialNumber);
+      setSerialPickerItem({
+        product: prod,
+        existingSerials: [],
+        isEditingCartItem: false
+      });
+      setSelectedSerialNums(available.length > 0 ? [available[0]] : []);
+      setCustomSerialInput('');
+    } else {
+      addItemToTab(activeTab.id, prod);
+    }
+  };
+
+  const handleOpenCartItemSerialPicker = (item: CartItem) => {
+    const prod = products.find(p => p.id === item.productId);
+    if (!prod) return;
+    setSerialPickerItem({
+      product: prod,
+      unitName: item.selectedUnit,
+      existingSerials: item.serialNumbers || [],
+      isEditingCartItem: true
+    });
+    setSelectedSerialNums(item.serialNumbers || []);
+    setCustomSerialInput('');
+  };
+
+  const handleConfirmSerialSelect = () => {
+    if (!serialPickerItem) return;
+    if (selectedSerialNums.length === 0) {
+      showToast('⚠️ Vui lòng chọn ít nhất 1 mã Serial/IMEI hoặc thêm mã mới');
+      return;
+    }
+
+    if (serialPickerItem.isEditingCartItem) {
+      updateCartItemSerials(
+        activeTab.id,
+        serialPickerItem.product.id,
+        serialPickerItem.unitName || serialPickerItem.product.units[0].name,
+        selectedSerialNums
+      );
+      showToast(`✅ Đã cập nhật ${selectedSerialNums.length} Serial/IMEI`);
+    } else {
+      addItemToTab(
+        activeTab.id,
+        serialPickerItem.product,
+        serialPickerItem.unitName,
+        selectedSerialNums
+      );
+      showToast(`✅ Đã thêm ${serialPickerItem.product.name} kèm ${selectedSerialNums.length} Serial/IMEI`);
+    }
+    setSerialPickerItem(null);
+  };
 
   // Credit calculation
   const isCreditExceeded =
-    currentCustomer.creditLimit > 0 &&
+    Boolean(currentCustomer?.creditLimit && currentCustomer.creditLimit > 0) &&
     remainingDebt > 0 &&
-    currentCustomer.currentDebt + remainingDebt > currentCustomer.creditLimit;
+    ((currentCustomer?.currentDebt || 0) + remainingDebt > (currentCustomer?.creditLimit || 0));
 
   // Handle Quick Payment Chips
   const handleQuickCashChip = (chip: 'full' | 'plus50' | 'plus100' | 'plus500' | 'plus1m' | 'debt100') => {
@@ -122,7 +240,9 @@ export const POSView: React.FC = () => {
   };
 
   // Perform Checkout
-  const handleCheckout = (method: 'cash' | 'vietqr' | 'debt') => {
+  const handleCheckout = async (method: 'cash' | 'vietqr' | 'debt') => {
+    if (isProcessingPayment) return;
+
     if (activeTab.items.length === 0) {
       showToast('⚠️ Giỏ hàng hiện đang trống!');
       return;
@@ -148,20 +268,30 @@ export const POSView: React.FC = () => {
       openVietQrModal(
         activeTab.paidAmount > 0 ? activeTab.paidAmount : totalAmount,
         orderCode,
-        currentCustomer.name,
-        () => {
-          const completedOrder = checkoutTab(activeTab.id, 'vietqr');
-          if (completedOrder) {
-            openPrintModal('k80', completedOrder);
+        currentCustomer?.name || 'Khách lẻ trực tiếp',
+        async () => {
+          try {
+            setIsProcessingPayment(true);
+            const completedOrder = await checkoutTab(activeTab.id, 'vietqr');
+            if (completedOrder) {
+              openPrintModal('k80', completedOrder);
+            }
+          } finally {
+            setIsProcessingPayment(false);
           }
         }
       );
       return;
     }
 
-    const order = checkoutTab(activeTab.id, method);
-    if (order) {
-      openPrintModal('k80', order);
+    try {
+      setIsProcessingPayment(true);
+      const order = await checkoutTab(activeTab.id, method);
+      if (order) {
+        openPrintModal('k80', order);
+      }
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -355,7 +485,7 @@ export const POSView: React.FC = () => {
                 return (
                   <div
                     key={prod.id}
-                    onClick={() => addItemToTab(activeTab.id, prod)}
+                    onClick={() => handleProductClick(prod)}
                     className="flex flex-col justify-between rounded-xl bg-white dark:bg-slate-900/90 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 p-2.5 sm:p-3 cursor-pointer shadow-xs transition-all duration-150 group active:scale-[0.98]"
                   >
                     <div className="space-y-1.5">
@@ -516,27 +646,40 @@ export const POSView: React.FC = () => {
               </div>
             </div>
 
+            {/* Price Tier Savings Pill */}
+            {wholesaleSavings > 0 && (
+              <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-[11px]">
+                <span className="font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                  <Tag className="h-3 w-3" />
+                  Bảng giá: {activeTab.tierPrice === 'vip' ? 'Đại Lý VIP' : 'Bán Sỉ Cấp 2'}
+                </span>
+                <span className="font-mono font-black text-emerald-700 dark:text-emerald-400">
+                  Tiết kiệm: {wholesaleSavings.toLocaleString('vi-VN')} đ
+                </span>
+              </div>
+            )}
+
             {/* Customer Credit Status Bar */}
-            {currentCustomer.creditLimit > 0 && (
+            {(currentCustomer?.creditLimit || 0) > 0 && (
               <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-[11px]">
                 <div className="flex items-center gap-1.5">
                   <span className="text-slate-500 dark:text-slate-400">Hạn mức nợ:</span>
                   <span className="font-mono font-bold text-slate-900 dark:text-white">
-                    {currentCustomer.creditLimit.toLocaleString('vi-VN')} đ
+                    {(currentCustomer?.creditLimit || 0).toLocaleString('vi-VN')} đ
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-slate-500 dark:text-slate-400">Dư nợ:</span>
                   <span
                     className={`font-mono font-bold ${
-                      currentCustomer.currentDebt > currentCustomer.creditLimit
+                      (currentCustomer?.currentDebt || 0) > (currentCustomer?.creditLimit || 0)
                         ? 'text-rose-600 dark:text-rose-400'
-                        : currentCustomer.currentDebt > currentCustomer.creditLimit * 0.8
+                        : (currentCustomer?.currentDebt || 0) > (currentCustomer?.creditLimit || 0) * 0.8
                         ? 'text-amber-600 dark:text-amber-400'
                         : 'text-emerald-600 dark:text-emerald-400'
                     }`}
                   >
-                    {currentCustomer.currentDebt.toLocaleString('vi-VN')} đ
+                    {(currentCustomer?.currentDebt || 0).toLocaleString('vi-VN')} đ
                   </span>
                 </div>
               </div>
@@ -571,6 +714,34 @@ export const POSView: React.FC = () => {
                       <div className="flex-1 truncate">
                         <div className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">SKU: {item.sku}</div>
+                        {/* Serial / IMEI Tags in Cart Item */}
+                        {(prod?.hasSerial || (item.serialNumbers && item.serialNumbers.length > 0)) && (
+                          <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {item.serialNumbers && item.serialNumbers.length > 0 ? (
+                              item.serialNumbers.map((sn, snIdx) => (
+                                <button
+                                  key={snIdx}
+                                  type="button"
+                                  onClick={() => handleOpenCartItemSerialPicker(item)}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300 font-mono text-[9.5px] font-bold border border-indigo-200 dark:border-indigo-700/60 hover:bg-indigo-200"
+                                  title="Nhấp để đổi Serial/IMEI"
+                                >
+                                  <Cpu className="h-2.5 w-2.5" />
+                                  <span>{sn}</span>
+                                </button>
+                              ))
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCartItemSerialPicker(item)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-300 font-mono text-[9.5px] font-bold border border-amber-300 dark:border-amber-700 animate-pulse hover:bg-amber-200"
+                              >
+                                <AlertCircle className="h-2.5 w-2.5" />
+                                <span>+ Gắn Serial / IMEI</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Multi-tier packaging unit selector */}
@@ -774,28 +945,80 @@ export const POSView: React.FC = () => {
               )}
             </div>
 
-            {/* DYNAMIC CREDIT GUARD LOCK ALERT */}
-            {isCreditExceeded && !activeTab.creditApprovalGranted && (
-              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-900/60 text-xs space-y-1.5">
-                <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-400">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  Cảnh báo: Dư nợ vượt trần tín dụng (+
-                  {(currentCustomer.currentDebt + remainingDebt - currentCustomer.creditLimit).toLocaleString('vi-VN')} đ)!
+            {/* DYNAMIC CREDIT GUARD WORKFLOW */}
+            {isCreditExceeded && (
+              activeTab?.creditApprovalGranted ? (
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Quản lý đã duyệt hạn mức ngoại lệ (Bán tiếp)</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-bold">
+                    Đã duyệt
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    createCreditApprovalRequest(
-                      activeTab.id,
-                      `Đại lý ${currentCustomer.name} xin ghi nợ đơn ${totalAmount.toLocaleString('vi-VN')} đ vượt trần hạn mức.`
-                    )
-                  }
-                  className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-xs transition-all active:scale-95"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  Gửi Yêu Cầu Duyệt Nợ Tới Quản Lý
-                </button>
-              </div>
+              ) : activeTab?.approvalRequestId ? (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+                      <Loader2 className="h-4 w-4 animate-spin text-amber-600 shrink-0" />
+                      <span>Đang chờ Quản lý duyệt yêu cầu nợ...</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-mono font-bold">
+                      Chờ duyệt
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openPinModal(
+                        'Quản lý nhập mã PIN để duyệt nợ trực tiếp tại quầy POS',
+                        () => grantCreditApprovalForTab(activeTab.id, 'Duyệt tại quầy bằng PIN')
+                      )
+                    }
+                    className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition-all active:scale-95 text-center flex items-center justify-center gap-1.5"
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    Quản Lý Duyệt Tại Quầy (Nhập PIN 8888)
+                  </button>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-400">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    Cảnh báo: Dư nợ vượt trần tín dụng (+
+                    {Math.max(0, (currentCustomer?.currentDebt || 0) + remainingDebt - (currentCustomer?.creditLimit || 0)).toLocaleString('vi-VN')} đ)!
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openPinModal(
+                          'Quản lý xác thực cấp nợ vượt trần trực tiếp',
+                          () => grantCreditApprovalForTab(activeTab.id, 'Duyệt trực tiếp tại quầy')
+                        )
+                      }
+                      className="py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition-all active:scale-95 text-center flex items-center justify-center gap-1"
+                    >
+                      <Lock className="h-3.5 w-3.5" />
+                      Duyệt Tại Quầy (PIN)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        createCreditApprovalRequest(
+                          activeTab.id,
+                          `Đại lý ${currentCustomer?.name || 'Khách hàng'} xin ghi nợ đơn ${totalAmount.toLocaleString('vi-VN')} đ vượt trần hạn mức.`
+                        )
+                      }
+                      className="py-1.5 px-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-xs transition-all active:scale-95 text-center flex items-center justify-center gap-1"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      Gửi Yêu Cầu Duyệt Nợ
+                    </button>
+                  </div>
+                </div>
+              )
             )}
 
             {/* Anti-Loss PIN Lock Button Trigger */}
@@ -819,8 +1042,11 @@ export const POSView: React.FC = () => {
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
+                disabled={isProcessingPayment}
                 onClick={() => handleCheckout('vietqr')}
-                className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all active:scale-95"
+                className={`flex flex-col items-center justify-center py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all active:scale-95 ${
+                  isProcessingPayment ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
               >
                 <QrCode className="h-4 w-4 mb-0.5" />
                 <span>VietQR 0đ</span>
@@ -828,25 +1054,190 @@ export const POSView: React.FC = () => {
 
               <button
                 type="button"
+                disabled={isProcessingPayment}
                 onClick={() => handleCheckout('cash')}
-                className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all active:scale-95"
+                className={`flex flex-col items-center justify-center py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all active:scale-95 ${
+                  isProcessingPayment ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
               >
                 <Banknote className="h-4 w-4 mb-0.5" />
-                <span>Tiền Mặt</span>
+                <span>{isProcessingPayment ? 'Đang lưu...' : 'Tiền Mặt'}</span>
               </button>
 
               <button
                 type="button"
+                disabled={isProcessingPayment}
                 onClick={() => handleCheckout('debt')}
-                className="flex flex-col items-center justify-center py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-bold text-xs transition-all active:scale-95"
+                className={`flex flex-col items-center justify-center py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 font-bold text-xs transition-all active:scale-95 ${
+                  isProcessingPayment ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
               >
                 <FileCheck className="h-4 w-4 mb-0.5 text-amber-500 dark:text-amber-400" />
-                <span>Ghi Nợ</span>
+                <span>{isProcessingPayment ? 'Đang lưu...' : 'Ghi Nợ'}</span>
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* SERIAL / IMEI SELECTION MODAL */}
+      {serialPickerItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400">
+                  <Cpu className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Chọn Mã Serial / IMEI Thiết Bị</h3>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[240px]">{serialPickerItem.product.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSerialPickerItem(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Quick manual serial input / scanner */}
+            <div className="space-y-1.5 text-xs">
+              <label className="font-semibold text-slate-700 dark:text-slate-300 flex justify-between">
+                <span>Nhập mã mới hoặc quét Barcode / QR:</span>
+                <span className="text-[10px] text-indigo-600 font-mono font-bold">Đã chọn: {selectedSerialNums.length}</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={customSerialInput}
+                  onChange={(e) => setCustomSerialInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && customSerialInput.trim()) {
+                      e.preventDefault();
+                      const sn = customSerialInput.trim().toUpperCase();
+                      if (!selectedSerialNums.includes(sn)) {
+                        setSelectedSerialNums([...selectedSerialNums, sn]);
+                      }
+                      setCustomSerialInput('');
+                    }
+                  }}
+                  placeholder="Gõ mã Serial / IMEI rồi bấm Enter..."
+                  className="flex-1 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-mono font-bold uppercase focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (customSerialInput.trim()) {
+                      const sn = customSerialInput.trim().toUpperCase();
+                      if (!selectedSerialNums.includes(sn)) {
+                        setSelectedSerialNums([...selectedSerialNums, sn]);
+                      }
+                      setCustomSerialInput('');
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs"
+                >
+                  Thêm
+                </button>
+              </div>
+            </div>
+
+            {/* Available in-stock serials */}
+            <div className="space-y-2 text-xs">
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                Serial / IMEI có sẵn trong kho ({serials.filter(s => (s.productId === serialPickerItem.product.id || s.sku === serialPickerItem.product.sku) && s.status === 'in_stock').length}):
+              </span>
+              <div className="max-h-40 overflow-y-auto space-y-1.5 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                {serials.filter(s => (s.productId === serialPickerItem.product.id || s.sku === serialPickerItem.product.sku) && s.status === 'in_stock').length > 0 ? (
+                  serials
+                    .filter(s => (s.productId === serialPickerItem.product.id || s.sku === serialPickerItem.product.sku) && s.status === 'in_stock')
+                    .map(s => {
+                      const isSelected = selectedSerialNums.includes(s.serialNumber);
+                      return (
+                        <label
+                          key={s.serialNumber}
+                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer border transition-colors ${
+                            isSelected
+                              ? 'bg-indigo-50 border-indigo-300 dark:bg-indigo-950/40 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200'
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                if (isSelected) {
+                                  setSelectedSerialNums(selectedSerialNums.filter(x => x !== s.serialNumber));
+                                } else {
+                                  setSelectedSerialNums([...selectedSerialNums, s.serialNumber]);
+                                }
+                              }}
+                              className="rounded text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className="font-mono font-bold text-xs">{s.serialNumber}</span>
+                          </div>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold">
+                            Trong kho
+                          </span>
+                        </label>
+                      );
+                    })
+                ) : (
+                  <div className="text-center py-4 text-slate-400 text-xs">
+                    Chưa có Serial nào trong kho cho sản phẩm này. Bạn có thể tự gõ mã Serial/IMEI vào ô phía trên.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Currently selected serials tags */}
+            {selectedSerialNums.length > 0 && (
+              <div className="space-y-1 text-xs">
+                <span className="text-[10px] text-slate-500 font-semibold uppercase">Đang gắn cho đơn ({selectedSerialNums.length}):</span>
+                <div className="flex flex-wrap gap-1">
+                  {selectedSerialNums.map(sn => (
+                    <span
+                      key={sn}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 font-mono text-[11px] font-bold"
+                    >
+                      {sn}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSerialNums(selectedSerialNums.filter(x => x !== sn))}
+                        className="text-indigo-500 hover:text-rose-600 ml-0.5"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setSerialPickerItem(null)}
+                className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Hủy Bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSerialSelect}
+                className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md active:scale-95 transition-all"
+              >
+                Xác Nhận ({selectedSerialNums.length} Serial)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

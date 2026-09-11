@@ -298,8 +298,8 @@ export const SupplierView: React.FC = () => {
         <div className="p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm">
           <span className="text-xs text-slate-500 font-medium">Tổng Nợ Phải Trả NCC</span>
           <div className="mt-1 flex items-baseline justify-between">
-            <span className="text-2xl font-bold text-rose-600 dark:text-rose-400">
-              {stats.totalDebt.toLocaleString('vi-VN')} đ
+            <span className="text-2xl font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap tabular-nums">
+              {stats.totalDebt.toLocaleString('vi-VN')}&nbsp;đ
             </span>
             <span className="text-xs text-rose-600 bg-rose-500/10 px-1.5 py-0.5 rounded font-medium">
               {stats.withDebtCount} NCC đang nợ
@@ -393,15 +393,15 @@ export const SupplierView: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold">
-                <th className="py-3 px-4">Nhà Cung Cấp & Mã</th>
-                <th className="py-3 px-4">Người Đại Diện & SĐT</th>
-                <th className="py-3 px-4">Địa Chỉ & MST</th>
-                <th className="py-3 px-4 text-right">Công Nợ Phải Trả</th>
-                <th className="py-3 px-4 text-center">Hạn Nợ Gối Đầu</th>
-                <th className="py-3 px-4 text-right">Tổng Mua Lũy Kế</th>
-                <th className="py-3 px-4">Tài Khoản Ngân Hàng</th>
-                <th className="py-3 px-4 text-center">Thao Tác</th>
+              <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold whitespace-nowrap">
+                <th className="py-3 px-4 whitespace-nowrap">Nhà Cung Cấp & Mã</th>
+                <th className="py-3 px-4 whitespace-nowrap">Người Đại Diện & SĐT</th>
+                <th className="py-3 px-4 whitespace-nowrap">Địa Chỉ & MST</th>
+                <th className="py-3 px-4 text-right whitespace-nowrap">Công Nợ Phải Trả</th>
+                <th className="py-3 px-4 text-center whitespace-nowrap">Hạn Nợ Gối Đầu</th>
+                <th className="py-3 px-4 text-right whitespace-nowrap">Tổng Mua Lũy Kế</th>
+                <th className="py-3 px-4 whitespace-nowrap">Tài Khoản Ngân Hàng</th>
+                <th className="py-3 px-4 text-center whitespace-nowrap">Thao Tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -422,7 +422,7 @@ export const SupplierView: React.FC = () => {
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                     >
                       {/* Name & Code */}
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 whitespace-nowrap">
                         <div>
                           <span className="font-semibold text-slate-900 dark:text-white block group-hover:text-indigo-600 transition-colors">
                             {sup.name}
@@ -439,7 +439,7 @@ export const SupplierView: React.FC = () => {
                       </td>
 
                       {/* Contact Person & Phone */}
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 whitespace-nowrap">
                         <div className="text-[11px] space-y-0.5">
                           <span className="font-medium text-slate-800 dark:text-slate-200 block">
                             {sup.contactPerson}
@@ -458,7 +458,7 @@ export const SupplierView: React.FC = () => {
                             {sup.address}
                           </span>
                           {sup.taxId && (
-                            <span className="font-mono text-[10px] text-slate-400 block">
+                            <span className="font-mono text-[10px] text-slate-400 block whitespace-nowrap">
                               MST: {sup.taxId}
                             </span>
                           )}
@@ -466,40 +466,40 @@ export const SupplierView: React.FC = () => {
                       </td>
 
                       {/* Current Debt */}
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
                         <span
-                          className={`font-bold text-xs inline-block px-2 py-0.5 rounded-full ${
+                          className={`font-bold text-xs inline-flex items-center justify-end px-2.5 py-1 rounded-full whitespace-nowrap tabular-nums ${
                             hasDebt
                               ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                               : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                           }`}
                         >
-                          {sup.currentDebt.toLocaleString('vi-VN')} đ
+                          {sup.currentDebt.toLocaleString('vi-VN')}&nbsp;đ
                         </span>
                       </td>
 
                       {/* Payment Terms */}
-                      <td className="py-3 px-4 text-center">
-                        <span className="text-slate-600 dark:text-slate-300 font-medium text-[11px]">
-                          {sup.paymentTermsDays} ngày
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <span className="text-slate-600 dark:text-slate-300 font-medium text-[11px] whitespace-nowrap tabular-nums">
+                          {sup.paymentTermsDays}&nbsp;ngày
                         </span>
                       </td>
 
                       {/* Total Purchased */}
-                      <td className="py-3 px-4 text-right">
-                        <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono text-[11px]">
-                          {sup.totalPurchased.toLocaleString('vi-VN')} đ
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono text-[11px] whitespace-nowrap tabular-nums">
+                          {sup.totalPurchased.toLocaleString('vi-VN')}&nbsp;đ
                         </span>
                       </td>
 
                       {/* Bank Info */}
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 whitespace-nowrap">
                         {sup.bankAccount ? (
                           <div className="text-[10px] space-y-0.5">
-                            <span className="font-medium text-slate-800 dark:text-slate-200 block">
+                            <span className="font-medium text-slate-800 dark:text-slate-200 block whitespace-nowrap">
                               {sup.bankName}
                             </span>
-                            <span className="font-mono text-indigo-600 dark:text-indigo-400 block">
+                            <span className="font-mono text-indigo-600 dark:text-indigo-400 block whitespace-nowrap">
                               STK: {sup.bankAccount}
                             </span>
                           </div>
@@ -509,7 +509,7 @@ export const SupplierView: React.FC = () => {
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
                         <RowActionMenu
                           items={[
                             ...(hasDebt

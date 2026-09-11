@@ -151,6 +151,18 @@
   background: rgba(99, 102, 241, 0.7);
 }
 
+/* Hide Next.js Development Indicator ("N" circle button) & Overlay */
+nextjs-portal,
+#nextjs-dev-tools,
+[data-nextjs-dev-indicator],
+[data-nextjs-toast],
+nextjs-dev-tools-indicator {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* Print Suite Styles */
 @media print {
   body {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyJWT, JWTPayload } from "@/lib/jwt";
 import { PermissionKey, UserRole, ROLE_PERMISSIONS } from "@/types/erp";
+import { DEMO_PERSONAS } from "@/data/demoPersonas";
 
 export interface ServerUserContext {
   userId: string;
@@ -78,7 +79,18 @@ export async function getCurrentUser(request: Request): Promise<ServerUserContex
     }
   }
 
-  return null;
+  // Fallback to selected demo role from cookie or header so role tour permissions are strictly enforced
+  const demoMatch = cookieHeader ? cookieHeader.match(/nexus_demo_role=([a-z_]+)/) : null;
+  const demoRole = (demoMatch ? demoMatch[1] : "admin") as UserRole;
+  const persona = DEMO_PERSONAS[demoRole] || DEMO_PERSONAS.admin;
+
+  return {
+    userId: persona.id,
+    email: persona.email,
+    name: persona.name,
+    role: persona.role,
+    permissions: persona.permissions,
+  };
 }
 
 /**

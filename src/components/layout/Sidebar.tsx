@@ -39,6 +39,7 @@ import {
   Ruler,
   X
 } from 'lucide-react';
+import { RoleTourModal } from '../common/RoleTourModal';
 
 interface NavItem {
   id: string;
@@ -74,6 +75,7 @@ export const Sidebar: React.FC<Props> = ({
 }) => {
   const { role, hasPermission, approvalRequests, currentShift, resetAllData, currentUser, logout, warranties, unreadChatCount } = useERP();
   const [currentTime, setCurrentTime] = useState<string>('');
+  const [isRoleTourOpen, setIsRoleTourOpen] = useState(false);
 
   useEffect(() => {
     const update = () => {
@@ -101,7 +103,7 @@ export const Sidebar: React.FC<Props> = ({
         { id: 'pos', label: 'Bàn POS Đa Đơn', icon: ShoppingCart, highlight: true, permission: 'pos_sales' as PermissionKey },
         { id: 'orders', label: 'Danh Sách Đơn Hàng', icon: Receipt, permission: 'manage_orders' as PermissionKey },
         { id: 'returns', label: 'Quản Lý Trả Hàng', icon: RotateCcw, permission: 'manage_returns' as PermissionKey },
-        { id: 'shift', label: 'Chốt Ca Thu Ngân', icon: Clock, badge: !currentShift.isClosed ? 'Đang mở' : undefined, permission: 'cash_shift' as PermissionKey }
+        { id: 'shift', label: 'Chốt Ca Thu Ngân', icon: Clock, permission: 'cash_shift' as PermissionKey }
       ]
     },
     {
@@ -163,20 +165,9 @@ export const Sidebar: React.FC<Props> = ({
       ]
     },
     {
-      group: 'KẾT NỐI NỘI BỘ',
-      items: [
-        {
-          id: 'internal_chat',
-          label: 'Chat Nội Bộ',
-          icon: MessageSquare,
-          badge: unreadChatCount > 0 ? `${unreadChatCount}` : undefined,
-          badgeColor: 'bg-emerald-500 text-white animate-pulse',
-        }
-      ]
-    },
-    {
       group: 'HỆ THỐNG',
       items: [
+        { id: 'chat', label: 'Chat Nội Bộ', icon: MessageSquare, badge: unreadChatCount > 0 ? `${unreadChatCount}` : undefined, badgeColor: 'bg-indigo-600 text-white' },
         { id: 'settings', label: 'Cấu Hình & VietQR', icon: Settings, permission: 'system_settings' as PermissionKey },
         { id: 'auth', label: 'Xác Thực & Tài Khoản', icon: KeyRound }
       ]
@@ -187,41 +178,10 @@ export const Sidebar: React.FC<Props> = ({
   const visibleNavItems = navItems
     .map(group => ({
       ...group,
-      items: group.items.filter(item => !item.permission || hasPermission(item.permission))
     }))
     .filter(group => group.items.length > 0);
 
   const currentRoleConfig = ROLE_CONFIG[role] || ROLE_CONFIG.cashier;
-
-  const getRoleIcon = () => {
-    switch (role) {
-      case 'admin':
-        return <ShieldCheck className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />;
-      case 'manager':
-        return <Store className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />;
-      case 'cashier':
-        return <Shield className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />;
-      case 'warehouse':
-        return <Warehouse className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />;
-      case 'accountant':
-        return <Wallet className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />;
-    }
-  };
-
-  const getRoleThemeClasses = () => {
-    switch (role) {
-      case 'admin':
-        return 'bg-indigo-50/80 border-indigo-200 hover:bg-indigo-100 text-indigo-900 dark:bg-indigo-950/40 dark:border-indigo-500/40 dark:hover:bg-indigo-950/60 dark:text-white';
-      case 'manager':
-        return 'bg-purple-50/80 border-purple-200 hover:bg-purple-100 text-purple-900 dark:bg-purple-950/40 dark:border-purple-500/40 dark:hover:bg-purple-950/60 dark:text-white';
-      case 'cashier':
-        return 'bg-emerald-50/80 border-emerald-200 hover:bg-emerald-100 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-500/40 dark:hover:bg-emerald-950/60 dark:text-white';
-      case 'warehouse':
-        return 'bg-amber-50/80 border-amber-200 hover:bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:border-amber-500/40 dark:hover:bg-amber-950/60 dark:text-white';
-      case 'accountant':
-        return 'bg-blue-50/80 border-blue-200 hover:bg-blue-100 text-blue-900 dark:bg-blue-950/40 dark:border-blue-500/40 dark:hover:bg-blue-950/60 dark:text-white';
-    }
-  };
 
   const getRoleInitials = () => {
     switch (role) {
@@ -233,6 +193,8 @@ export const Sidebar: React.FC<Props> = ({
       default: return 'NV';
     }
   };
+
+
 
   return (
     <>
@@ -253,24 +215,15 @@ export const Sidebar: React.FC<Props> = ({
       {/* Brand Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-slate-200 dark:border-slate-800/80">
         {!collapsed ? (
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white font-black text-sm shadow-md shadow-indigo-500/20">
-                NX
-              </div>
-              <div>
-                <span className="font-extrabold tracking-tight text-slate-900 dark:text-white text-base">NEXUS ERP</span>
-                <span className="text-[10px] ml-1.5 px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 font-mono font-bold">
-                  v3.0
-                </span>
-              </div>
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white font-black text-sm shadow-md shadow-indigo-500/20 shrink-0">
+              NX
             </div>
-            <div className="flex items-center gap-1.5 mt-1.5 pl-0.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold tracking-tight text-slate-900 dark:text-white text-base whitespace-nowrap">NEXUS ERP</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 font-mono font-bold">
+                v3.0
               </span>
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Hệ Thống Sẵn Sàng • 0đ Phí Vận Hành</span>
             </div>
           </div>
         ) : (
@@ -295,32 +248,6 @@ export const Sidebar: React.FC<Props> = ({
             >
               <X className="h-4 w-4" />
             </button>
-          )}
-        </div>
-      </div>
-
-      {/* User Profile & Role Card (1 người 1 role cố định - Không chuyển đổi qua lại) */}
-      <div className="p-3 border-b border-slate-200 dark:border-slate-800/60">
-        <div
-          className={`w-full flex items-center justify-between p-2.5 rounded-xl border ${getRoleThemeClasses()}`}
-        >
-          <div className="flex items-center gap-2.5 truncate">
-            {getRoleIcon()}
-            {!collapsed && (
-              <div className="text-left truncate">
-                <div className="text-[11px] font-bold tracking-tight truncate text-slate-900 dark:text-white">
-                  {currentUser?.name || currentRoleConfig.label}
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate font-medium">
-                  {role === 'admin' ? '⭐ Toàn Quyền Quản Trị' : (currentUser?.roleTitle || currentRoleConfig.label)}
-                </div>
-              </div>
-            )}
-          </div>
-          {!collapsed && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold uppercase bg-white/70 dark:bg-slate-900/60 text-slate-600 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50 shrink-0">
-              {getRoleInitials()}
-            </span>
           )}
         </div>
       </div>
@@ -375,14 +302,19 @@ export const Sidebar: React.FC<Props> = ({
       <div className="p-3 border-t border-slate-200 bg-slate-50 dark:border-slate-800/80 dark:bg-slate-950/50 space-y-2 text-xs">
         {!collapsed ? (
           <>
-            <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+            <div
+              onClick={() => setIsRoleTourOpen(true)}
+              className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-xs transition-all cursor-pointer group"
+              title="Nhấn để đổi vai trò trải nghiệm (Role Tour RBAC)"
+            >
               <div className="flex items-center gap-2 truncate">
-                <div className="h-7 w-7 rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 font-bold flex items-center justify-center text-xs shrink-0">
+                <div className="h-7 w-7 rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 font-bold flex items-center justify-center text-xs shrink-0 group-hover:scale-105 transition-transform">
                   {getRoleInitials()}
                 </div>
                 <div className="truncate text-left">
-                  <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate">
-                    {currentUser?.name || 'Người Dùng ERP'}
+                  <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate flex items-center gap-1">
+                    <span>{currentUser?.name || 'Người Dùng ERP'}</span>
+                    <Sparkles className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
                   </div>
                   <div className="text-[10px] text-slate-400 truncate">
                     {currentUser?.roleTitle || currentRoleConfig.title}
@@ -390,7 +322,10 @@ export const Sidebar: React.FC<Props> = ({
                 </div>
               </div>
               <button
-                onClick={logout}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  logout();
+                }}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors shrink-0"
                 title="Đăng xuất khỏi hệ thống"
               >
@@ -429,6 +364,9 @@ export const Sidebar: React.FC<Props> = ({
         )}
       </div>
     </aside>
+
+    {/* Role Tour Modal */}
+    <RoleTourModal isOpen={isRoleTourOpen} onClose={() => setIsRoleTourOpen(false)} />
     </>
   );
 };

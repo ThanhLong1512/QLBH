@@ -289,12 +289,12 @@ const MainLayout: React.FC<NexusAppProps> = ({ initialView = 'dashboard' }) => {
         onClose={() => setApprovalDrawerId(null)}
       />
 
-      {/* Internal Team Chatbox Widget */}
+      {/* Internal Team Chatbox Widget (Floating at bottom-right) */}
       <InternalChatWidget onExpandToView={() => navigateToView('internal_chat')} />
 
       {/* Global Toast Notification */}
       {activeToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-2xl bg-white/95 text-slate-900 border border-indigo-200 dark:bg-slate-900/95 dark:text-white dark:border-indigo-500/50 px-5 py-3 shadow-2xl backdrop-blur-md text-xs font-semibold animate-in slide-in-from-bottom duration-200">
+        <div className="fixed bottom-20 right-6 z-50 flex items-center gap-2 rounded-2xl bg-white/95 text-slate-900 border border-indigo-200 dark:bg-slate-900/95 dark:text-white dark:border-indigo-500/50 px-5 py-3 shadow-2xl backdrop-blur-md text-xs font-semibold animate-in slide-in-from-bottom duration-200">
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
           <span>{activeToast}</span>
         </div>

@@ -19,6 +19,7 @@ export interface OfflineOrder {
   createdAt: string;
   syncStatus: "PENDING" | "SYNCING" | "SYNCED" | "FAILED";
   lastSyncAttempt?: string;
+  payload?: any;
 }
 
 export interface CachedProduct {
@@ -86,4 +87,79 @@ export async function setCachedData<T>(key: string, data: T): Promise<void> {
   try {
     localStorage.setItem(`crm_cache_${key}`, JSON.stringify(data));
   } catch {}
+}
+
+/**
+ * Genuine Offline Queue Sync Engine
+ * Iterates through PENDING orders in Dexie IndexedDB and pushes to /api/orders
+ */
+export async function syncOfflineOrders(): Promise<{ syncedCount: number; errorCount: number }> {
+  if (typeof window === "undefined") return { syncedCount: 0, errorCount: 0 };
+  try {
+    const pending = await offlineDB.offlineOrders
+      .where("syncStatus")
+      .equals("PENDING")
+      .toArray();
+
+    if (!pending || pending.length === 0) {
+      return { syncedCount: 0, errorCount: 0 };
+    }
+
+    let syncedCount = 0;
+    let errorCount = 0;
+
+    for (const item of pending) {
+      if (!item.id) continue;
+      await offlineDB.offlineOrders.update(item.id, { syncStatus: "SYNCING" });
+
+      try {
+        const payload = item.payload || {
+          code: `DH-OFFLINE-${item.id}`,
+          customerName: item.customerName,
+          customerPhone: item.customerPhone,
+          totalAmount: item.totalAmount,
+          items: item.items.map((i) => ({
+            productId: i.productId,
+            name: i.productName,
+            sku: "OFFLINE",
+            selectedUnit: i.volume || "Cái",
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+            totalPrice: i.quantity * i.unitPrice,
+          })),
+        };
+
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          await offlineDB.offlineOrders.update(item.id, {
+            syncStatus: "SYNCED",
+            lastSyncAttempt: new Date().toISOString(),
+          });
+          syncedCount++;
+        } else {
+          await offlineDB.offlineOrders.update(item.id, {
+            syncStatus: "PENDING",
+            lastSyncAttempt: new Date().toISOString(),
+          });
+          errorCount++;
+        }
+      } catch {
+        await offlineDB.offlineOrders.update(item.id, {
+          syncStatus: "PENDING",
+          lastSyncAttempt: new Date().toISOString(),
+        });
+        errorCount++;
+      }
+    }
+
+    return { syncedCount, errorCount };
+  } catch (err) {
+    console.error("Offline sync error:", err);
+    return { syncedCount: 0, errorCount: 0 };
+  }
 }

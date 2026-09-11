@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Printer, X, Receipt, FileText, Tag, Check, Download } from 'lucide-react';
@@ -90,119 +90,194 @@ export const PrintSuiteModal: React.FC = () => {
               id="printable-k80"
               className="print-k80 w-[320px] bg-white text-slate-950 p-5 rounded-lg shadow-2xl font-mono text-[11px] leading-tight border border-slate-300"
             >
-              <div className="text-center pb-2 border-b border-dashed border-slate-400">
-                <h2 className="font-extrabold text-sm uppercase tracking-wider">NEXUS RETAIL & DISTRIBUTION</h2>
-                <p className="text-[10px] text-slate-600">Tổng kho & Phân phối Thiết bị Toàn Quốc</p>
-                <p className="text-[10px] text-slate-600">Hotline: 1900.888.666 - CN: 142 QL1A, Thủ Đức, TP.HCM</p>
-              </div>
-
-              <div className="py-2.5 border-b border-dashed border-slate-400 text-[10px] space-y-0.5">
-                <div className="flex justify-between">
-                  <span>MÃ ĐƠN:</span>
-                  <strong className="text-slate-900">{order.code}</strong>
-                </div>
-                <div className="flex justify-between">
-                  <span>NGÀY GIỜ:</span>
-                  <span>{order.createdAt}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>THU NGÂN:</span>
-                  <span>{order.cashierName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>KHÁCH HÀNG:</span>
-                  <span className="font-semibold truncate max-w-[160px]">{order.customerName}</span>
-                </div>
-                {order.customerPhone && (
-                  <div className="flex justify-between">
-                    <span>SĐT KH:</span>
-                    <span>{order.customerPhone}</span>
+              {/* Check if Shift Handover or Standard Sales Order */}
+              {order.id === 'shift_receipt' || order.code.startsWith('CA-') ? (
+                <>
+                  <div className="text-center pb-2 border-b border-dashed border-slate-400">
+                    <h2 className="font-extrabold text-sm uppercase tracking-wider">NEXUS RETAIL & DISTRIBUTION</h2>
+                    <p className="text-[11px] font-bold uppercase mt-1 text-indigo-950">BIÊN BẢN BÀN GIAO CA & CHỐT KÉT</p>
+                    <p className="text-[9px] text-slate-500">Quầy Bán Lẻ POS-01 • Chốt Sổ Tiền Mặt</p>
                   </div>
-                )}
-              </div>
 
-              {/* Items Table */}
-              <div className="py-2.5 border-b border-dashed border-slate-400">
-                <table className="w-full text-[10px]">
-                  <thead>
-                    <tr className="border-b border-slate-300 font-bold">
-                      <th className="text-left pb-1">Tên SP / ĐVT</th>
-                      <th className="text-center pb-1">SL</th>
-                      <th className="text-right pb-1">Đ.Giá</th>
-                      <th className="text-right pb-1">T.Tiền</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {order.items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="py-1 pr-1">
-                          <div className="font-semibold text-[10.5px] leading-tight">{item.name}</div>
-                          <div className="text-[9px] text-slate-500">
-                            [{item.selectedUnit}] {item.serialNumbers?.length ? `SN: ${item.serialNumbers[0]}` : ''}
-                          </div>
-                        </td>
-                        <td className="text-center py-1 font-bold">{item.quantity}</td>
-                        <td className="text-right py-1">{item.unitPrice.toLocaleString('vi-VN')}</td>
-                        <td className="text-right py-1 font-semibold">
-                          {item.totalPrice.toLocaleString('vi-VN')}
-                        </td>
-                      </tr>
+                  <div className="py-2.5 border-b border-dashed border-slate-400 text-[10px] space-y-0.5">
+                    <div className="flex justify-between">
+                      <span>MÃ BIÊN BẢN:</span>
+                      <strong className="text-slate-900">{order.code}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>THỜI GIAN CHỐT:</span>
+                      <span>{order.createdAt}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>THU NGÂN BÀN GIAO:</span>
+                      <strong className="text-slate-900">{order.cashierName}</strong>
+                    </div>
+                  </div>
+
+                  {/* Cash Breakdown */}
+                  <div className="py-2.5 border-b border-dashed border-slate-400 space-y-1 text-[10.5px]">
+                    <div className="font-bold uppercase text-[10px] text-slate-700 pb-0.5 border-b border-slate-200">
+                      I. Hạch Toán Doanh Thu Sổ Sách
+                    </div>
+                    {order.items.map((it, idx) => (
+                      <div key={idx} className="flex justify-between">
+                        <span>{it.name}:</span>
+                        <span className="font-mono font-semibold">{it.totalPrice.toLocaleString('vi-VN')} đ</span>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Totals */}
-              <div className="py-2.5 border-b border-dashed border-slate-400 space-y-1 text-[11px]">
-                <div className="flex justify-between">
-                  <span>Cộng tiền hàng:</span>
-                  <span>{order.subtotal.toLocaleString('vi-VN')} đ</span>
-                </div>
-                {order.discountAmount > 0 && (
-                  <div className="flex justify-between text-slate-700">
-                    <span>Chiết khấu:</span>
-                    <span>-{order.discountAmount.toLocaleString('vi-VN')} đ</span>
+                    <div className="flex justify-between font-bold pt-1 border-t border-slate-300 text-slate-900">
+                      <span>TỔNG TIỀN KÉT (LÝ THUYẾT):</span>
+                      <span className="font-mono">{order.paidAmount.toLocaleString('vi-VN')} đ</span>
+                    </div>
                   </div>
-                )}
-                {order.shippingFee > 0 && (
-                  <div className="flex justify-between">
-                    <span>Phí giao hàng:</span>
-                    <span>+{order.shippingFee.toLocaleString('vi-VN')} đ</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-xs font-bold pt-1 border-t border-slate-300">
-                  <span>TỔNG THANH TOÁN:</span>
-                  <span className="text-sm font-black">{order.totalAmount.toLocaleString('vi-VN')} đ</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Đã thanh toán:</span>
-                  <span className="font-semibold">{order.paidAmount.toLocaleString('vi-VN')} đ</span>
-                </div>
-                {order.debtAmount > 0 && (
-                  <div className="flex justify-between font-bold text-red-600">
-                    <span>GHI NỢ ĐƠN NÀY:</span>
-                    <span>{order.debtAmount.toLocaleString('vi-VN')} đ</span>
-                  </div>
-                )}
-              </div>
 
-              {/* QR Code */}
-              <div className="pt-3 pb-2 flex flex-col items-center justify-center text-center">
-                <img
-                  src={qrUrl}
-                  alt="VietQR"
-                  className="w-28 h-28 object-contain border border-slate-200 rounded p-1"
-                />
-                <span className="text-[9px] text-slate-600 mt-1 font-medium">
-                  Quét VietQR chuyển khoản chính xác nội dung {order.code}
-                </span>
-              </div>
+                  {/* Physical Count & Variance */}
+                  <div className="py-2.5 border-b border-dashed border-slate-400 space-y-1.5 text-[10.5px]">
+                    <div className="font-bold uppercase text-[10px] text-slate-700 pb-0.5 border-b border-slate-200">
+                      II. Kết Quả Kiểm Đếm Thực Tế
+                    </div>
+                    <div className="p-2 rounded bg-slate-50 border border-slate-200 text-[10px] space-y-1">
+                      <p className="font-semibold text-slate-900">{order.notes}</p>
+                    </div>
+                  </div>
 
-              <div className="text-center pt-2 text-[9px] text-slate-500 border-t border-dashed border-slate-300 space-y-0.5">
-                <p>Cảm ơn Quý khách & Hẹn gặp lại!</p>
-                <p>Hotline hỗ trợ bảo hành: 1900.888.666</p>
-                <p className="font-mono text-[8px] text-slate-400">NEXUS ERP v3.0 • Powered by AI Studio</p>
-              </div>
+                  {/* Signatures */}
+                  <div className="pt-3 pb-2 text-[10px] grid grid-cols-2 text-center">
+                    <div>
+                      <p className="font-bold">Thu Ngân Giao Ca</p>
+                      <p className="text-[8px] text-slate-400">(Ký xác nhận)</p>
+                      <div className="h-10" />
+                      <p className="font-medium">{order.cashierName}</p>
+                    </div>
+                    <div>
+                      <p className="font-bold">Quản Lý / Nhận Ca</p>
+                      <p className="text-[8px] text-slate-400">(Ký duyệt)</p>
+                      <div className="h-10" />
+                      <p className="font-medium">Quản Trị Viên</p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-center pb-2 border-b border-dashed border-slate-400">
+                    <h2 className="font-extrabold text-sm uppercase tracking-wider">NEXUS RETAIL & DISTRIBUTION</h2>
+                    <p className="text-[10px] text-slate-600">Tổng kho & Phân phối Thiết bị Toàn Quốc</p>
+                    <p className="text-[10px] text-slate-600">Hotline: 1900.888.666 - CN: 142 QL1A, Thủ Đức, TP.HCM</p>
+                  </div>
+
+                  <div className="py-2.5 border-b border-dashed border-slate-400 text-[10px] space-y-0.5">
+                    <div className="flex justify-between">
+                      <span>MÃ ĐƠN:</span>
+                      <strong className="text-slate-900">{order.code}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>NGÀY GIỜ:</span>
+                      <span>{order.createdAt}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>THU NGÂN:</span>
+                      <span>{order.cashierName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>KHÁCH HÀNG:</span>
+                      <span className="font-semibold truncate max-w-[160px]">{order.customerName}</span>
+                    </div>
+                    {order.customerPhone && (
+                      <div className="flex justify-between">
+                        <span>SĐT KH:</span>
+                        <span>{order.customerPhone}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Items Table with Serial / IMEI display */}
+                  <div className="py-2.5 border-b border-dashed border-slate-400">
+                    <table className="w-full text-[10px]">
+                      <thead>
+                        <tr className="border-b border-slate-300 font-bold">
+                          <th className="text-left pb-1">Tên SP / ĐVT</th>
+                          <th className="text-center pb-1">SL</th>
+                          <th className="text-right pb-1">Đ.Giá</th>
+                          <th className="text-right pb-1">T.Tiền</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {order.items.map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="py-1 pr-1">
+                              <div className="font-semibold text-[10.5px] leading-tight">{item.name}</div>
+                              <div className="text-[9px] text-slate-500">
+                                [{item.selectedUnit}] {item.serialNumbers && item.serialNumbers.length > 0 ? (
+                                  <span className="text-indigo-700 font-bold font-mono">
+                                    • SN: {item.serialNumbers.join(', ')}
+                                  </span>
+                                ) : ''}
+                              </div>
+                            </td>
+                            <td className="text-center py-1 font-bold">{item.quantity}</td>
+                            <td className="text-right py-1">{item.unitPrice.toLocaleString('vi-VN')}</td>
+                            <td className="text-right py-1 font-semibold">
+                              {item.totalPrice.toLocaleString('vi-VN')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Totals */}
+                  <div className="py-2.5 border-b border-dashed border-slate-400 space-y-1 text-[11px]">
+                    <div className="flex justify-between">
+                      <span>Cộng tiền hàng:</span>
+                      <span>{order.subtotal.toLocaleString('vi-VN')} đ</span>
+                    </div>
+                    {order.discountAmount > 0 && (
+                      <div className="flex justify-between text-slate-700">
+                        <span>Chiết khấu:</span>
+                        <span>-{order.discountAmount.toLocaleString('vi-VN')} đ</span>
+                      </div>
+                    )}
+                    {order.shippingFee > 0 && (
+                      <div className="flex justify-between">
+                        <span>Phí giao hàng:</span>
+                        <span>+{order.shippingFee.toLocaleString('vi-VN')} đ</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-xs font-bold pt-1 border-t border-slate-300">
+                      <span>TỔNG THANH TOÁN:</span>
+                      <span className="text-sm font-black">{order.totalAmount.toLocaleString('vi-VN')} đ</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Đã thanh toán:</span>
+                      <span className="font-semibold">{order.paidAmount.toLocaleString('vi-VN')} đ</span>
+                    </div>
+                    {order.debtAmount > 0 && (
+                      <div className="flex justify-between font-bold text-red-600">
+                        <span>GHI NỢ ĐƠN NÀY:</span>
+                        <span>{order.debtAmount.toLocaleString('vi-VN')} đ</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* QR Code (VietQR / Electronic Warranty Lookup) */}
+                  <div className="pt-3 pb-2 flex flex-col items-center justify-center text-center">
+                    <img
+                      src={qrUrl}
+                      alt="VietQR"
+                      className="w-28 h-28 object-contain border border-slate-200 rounded p-1"
+                    />
+                    <span className="text-[9px] text-slate-600 mt-1 font-medium">
+                      Quét VietQR chuyển khoản hoặc tra cứu BH điện tử đơn {order.code}
+                    </span>
+                  </div>
+
+                  <div className="text-center pt-2 text-[9px] text-slate-500 border-t border-dashed border-slate-300 space-y-0.5">
+                    <p>Cảm ơn Quý khách & Hẹn gặp lại!</p>
+                    <p>Hotline kích hoạt bảo hành điện tử: 1900.888.666</p>
+                    <p className="font-mono text-[8px] text-slate-400">NEXUS ERP v3.0 • Serial & Warranty Cloud</p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -269,6 +344,11 @@ export const PrintSuiteModal: React.FC = () => {
                       <td className="border border-slate-300 p-1.5">
                         <div className="font-semibold text-slate-900">{it.name}</div>
                         <div className="text-[10px] text-slate-500 font-mono">SKU: {it.sku}</div>
+                        {it.serialNumbers && it.serialNumbers.length > 0 && (
+                          <div className="text-[9.5px] font-mono font-bold text-indigo-700">
+                            Serial/IMEI: {it.serialNumbers.join(', ')}
+                          </div>
+                        )}
                       </td>
                       <td className="border border-slate-300 p-1.5 text-center font-medium">{it.selectedUnit}</td>
                       <td className="border border-slate-300 p-1.5 text-center font-bold">{it.quantity}</td>

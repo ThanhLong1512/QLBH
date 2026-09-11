@@ -444,15 +444,15 @@ export const CustomerView: React.FC = () => {
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 text-slate-500 dark:text-slate-400 uppercase font-semibold">
+              <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 text-slate-500 dark:text-slate-400 uppercase font-semibold whitespace-nowrap">
                 <tr>
-                  <th className="p-4">Khách Hàng & Mã KH</th>
-                  <th className="p-4">Liên Hệ & Địa Chỉ</th>
-                  <th className="p-4 text-center">Phân Hạng</th>
-                  <th className="p-4 text-right">Hạn Mức Tín Dụng</th>
-                  <th className="p-4 text-right">Dư Nợ Hiện Tại</th>
-                  <th className="p-4 text-center">Tỷ Lệ Chạm Trần</th>
-                  <th className="p-4 text-center">Thao Tác (CRUD)</th>
+                  <th className="p-4 whitespace-nowrap">Khách Hàng & Mã KH</th>
+                  <th className="p-4 whitespace-nowrap">Liên Hệ & Địa Chỉ</th>
+                  <th className="p-4 text-center whitespace-nowrap">Phân Hạng</th>
+                  <th className="p-4 text-right whitespace-nowrap">Hạn Mức Tín Dụng</th>
+                  <th className="p-4 text-right whitespace-nowrap">Dư Nợ Hiện Tại</th>
+                  <th className="p-4 text-center whitespace-nowrap">Tỷ Lệ Chạm Trần</th>
+                  <th className="p-4 text-center whitespace-nowrap">Thao Tác (CRUD)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -470,7 +470,7 @@ export const CustomerView: React.FC = () => {
                     return (
                       <tr key={cust.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                         {/* Name & Code */}
-                        <td className="p-4">
+                        <td className="p-4 whitespace-nowrap">
                           <div className="font-bold text-slate-900 dark:text-white text-sm">{cust.name}</div>
                           <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">
                             Mã: {cust.code} • Hạn nợ: {cust.paymentTermDays} ngày
@@ -478,25 +478,25 @@ export const CustomerView: React.FC = () => {
                         </td>
 
                         {/* Phone & Address */}
-                        <td className="p-4">
+                        <td className="p-4 whitespace-nowrap">
                           <div className="font-mono text-slate-700 dark:text-slate-300">{cust.phone}</div>
                           <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-xs">{cust.address}</div>
                         </td>
 
                         {/* Tier Badge */}
-                        <td className="p-4 text-center">
+                        <td className="p-4 text-center whitespace-nowrap">
                           {getTierBadge(cust.tier)}
                         </td>
 
                         {/* Credit Limit */}
-                        <td className="p-4 text-right font-mono font-bold text-slate-900 dark:text-slate-200">
-                          {cust.creditLimit.toLocaleString('vi-VN')} đ
+                        <td className="p-4 text-right font-mono font-bold text-slate-900 dark:text-slate-200 whitespace-nowrap tabular-nums">
+                          {cust.creditLimit.toLocaleString('vi-VN')}&nbsp;đ
                         </td>
 
                         {/* Current Debt */}
-                        <td className="p-4 text-right font-mono font-bold">
+                        <td className="p-4 text-right font-mono font-bold whitespace-nowrap tabular-nums">
                           <span className={isOverLimit ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100'}>
-                            {cust.currentDebt.toLocaleString('vi-VN')} đ
+                            {cust.currentDebt.toLocaleString('vi-VN')}&nbsp;đ
                           </span>
                         </td>
 

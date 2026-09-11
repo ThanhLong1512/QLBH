@@ -25,13 +25,25 @@ import {
   Filter,
   Plus,
   Radio,
-  Clock
+  Clock,
+  Image as ImageIcon,
+  ImagePlus,
+  Globe,
+  Languages,
+  Download,
+  X,
+  ChevronDown,
 } from 'lucide-react';
+import {
+  ChatLang,
+  SUPPORTED_LANGUAGES,
+  CHAT_TRANSLATIONS,
+  translateMessage,
+} from '../../lib/chatI18n';
 
 interface ChannelDef {
   id: string;
-  name: string;
-  desc: string;
+  nameKey: 'channelGeneral' | 'channelSales' | 'channelWarehouse' | 'channelFinance';
   icon: string;
   category: 'team' | 'dept';
 }
@@ -39,29 +51,25 @@ interface ChannelDef {
 const CHANNELS: ChannelDef[] = [
   {
     id: 'general',
-    name: 'Kênh Chung Công Ty',
-    desc: 'Thông báo chung, văn hóa doanh nghiệp & thảo luận toàn thể nhân viên',
+    nameKey: 'channelGeneral',
     icon: '📢',
     category: 'team',
   },
   {
     id: 'sales',
-    name: 'Bán Hàng & Thu Ngân',
-    desc: 'Quầy POS, chốt đơn hàng, báo giá sỉ/lẻ & bàn giao ca làm việc',
+    nameKey: 'channelSales',
     icon: '🛒',
     category: 'dept',
   },
   {
     id: 'warehouse',
-    name: 'Kho Vận & Giao Hàng',
-    desc: 'Báo tồn kho thực tế, sắp xếp soạn hàng & giao nhận hàng hóa',
+    nameKey: 'channelWarehouse',
     icon: '📦',
     category: 'dept',
   },
   {
     id: 'finance',
-    name: 'Kế Toán & Quản Lý',
-    desc: 'Thẩm định duyệt nợ, báo cáo dòng tiền, đối soát thu chi & quyết toán',
+    nameKey: 'channelFinance',
     icon: '💼',
     category: 'dept',
   },
@@ -70,19 +78,11 @@ const CHANNELS: ChannelDef[] = [
 const EMOJIS = ['👍', '❤️', '🔥', '🎉', '👏', '✅', '📦', '💰', '⚡', '🙏', '🚀', '💯'];
 
 const QUICK_TAGS = [
-  { tag: '@all', label: '@TấtCả', color: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-400' },
-  { tag: '@kho', label: '@Kho', color: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400' },
-  { tag: '@ketoan', label: '@KếToán', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' },
-  { tag: '@pos', label: '@ThuNgân', color: 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-400' },
-  { tag: '@admin', label: '@QuảnTrị', color: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400' },
-];
-
-const QUICK_TEMPLATES = [
-  'Kho kiểm tra giúp mã này còn bao nhiêu hàng trên kệ?',
-  'Đã xuất kho và bàn giao đơn hàng cho shipper giao đi.',
-  'Nhờ kế toán duyệt nhanh đơn công nợ cho khách hàng.',
-  'Quầy thu ngân đã đối soát tiền mặt cuối ca khớp 100%.',
-  'Đã tiếp nhận yêu cầu và đang xử lý ngay nhé!',
+  { tag: '@all', color: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-400' },
+  { tag: '@kho', color: 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400' },
+  { tag: '@ketoan', color: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' },
+  { tag: '@pos', color: 'bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-400' },
+  { tag: '@admin', color: 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400' },
 ];
 
 export const InternalChatView: React.FC = () => {
@@ -97,6 +97,44 @@ export const InternalChatView: React.FC = () => {
     employees,
     role,
   } = useERP();
+
+  // Language state
+  const [chatLang, setChatLang] = useState<ChatLang>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('nexus_chat_lang') as ChatLang) || 'vi';
+    }
+    return 'vi';
+  });
+  const [showLangMenu, setShowLangMenu] = useState(false);
+
+  // Translation per message
+  const [translatedMessages, setTranslatedMessages] = useState<Record<string, boolean>>({});
+
+  const t = CHAT_TRANSLATIONS[chatLang] || CHAT_TRANSLATIONS.vi;
+
+  const handleSetLang = (newLang: ChatLang) => {
+    setChatLang(newLang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nexus_chat_lang', newLang);
+    }
+    setShowLangMenu(false);
+  };
+
+  const toggleTranslate = (msgId: string) => {
+    setTranslatedMessages((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
+  };
+
+  // Image Uploading State
+  const [selectedImage, setSelectedImage] = useState<{
+    file?: File;
+    previewUrl: string;
+    title: string;
+  } | null>(null);
+
+  // Lightbox Modal Image Preview
+  const [previewModalImg, setPreviewModalImg] = useState<{ url: string; title: string } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [inputContent, setInputContent] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -114,13 +152,22 @@ export const InternalChatView: React.FC = () => {
   }, [chatMessages, activeChatChannelId, markChannelAsRead]);
 
   // Current channel info
-  const currentChannel = CHANNELS.find((c) => c.id === activeChatChannelId) || {
-    id: activeChatChannelId,
-    name: activeChatChannelId.startsWith('dm_') ? 'Tin Nhắn Trực Tiếp' : 'Kênh Thảo Luận',
-    desc: 'Hội thoại nội bộ doanh nghiệp',
-    icon: '💬',
-    category: 'team' as const,
-  };
+  const matchedCh = CHANNELS.find((c) => c.id === activeChatChannelId);
+  const currentChannel = matchedCh
+    ? {
+        id: matchedCh.id,
+        name: t[matchedCh.nameKey].name,
+        desc: t[matchedCh.nameKey].desc,
+        icon: matchedCh.icon,
+        category: matchedCh.category,
+      }
+    : {
+        id: activeChatChannelId,
+        name: activeChatChannelId.startsWith('dm_') ? 'Tin Nhắn Riêng' : 'Kênh Thảo Luận',
+        desc: t.subtitle,
+        icon: '💬',
+        category: 'team' as const,
+      };
 
   // Filter messages for current channel
   const currentMessages = chatMessages.filter((m) => {
@@ -132,12 +179,95 @@ export const InternalChatView: React.FC = () => {
     );
   });
 
+  // Image processing with canvas compression
+  const processImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const rawUrl = ev.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 1200;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.85);
+          setSelectedImage({
+            file,
+            previewUrl: compressed,
+            title: file.name || 'Ảnh đính kèm',
+          });
+        } else {
+          setSelectedImage({
+            file,
+            previewUrl: rawUrl,
+            title: file.name || 'Ảnh đính kèm',
+          });
+        }
+      };
+      img.src = rawUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processImageFile(file);
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          processImageFile(file);
+        }
+      }
+    }
+  };
+
   const handleSend = () => {
-    if (!inputContent.trim()) return;
-    sendChatMessage(activeChatChannelId, inputContent.trim(), selectedTag || undefined);
+    if (!inputContent.trim() && !selectedImage) return;
+
+    const attachments: ChatAttachment[] = [];
+    if (selectedImage) {
+      attachments.push({
+        type: 'image',
+        title: selectedImage.title,
+        url: selectedImage.previewUrl,
+      });
+    }
+
+    sendChatMessage(
+      activeChatChannelId,
+      inputContent.trim(),
+      selectedTag || undefined,
+      attachments.length > 0 ? attachments : undefined
+    );
+
     setInputContent('');
+    setSelectedImage(null);
     setSelectedTag(null);
     setShowEmojiPicker(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     if (inputRef.current) inputRef.current.focus();
   };
 
@@ -151,50 +281,112 @@ export const InternalChatView: React.FC = () => {
   const getRoleBadge = (msgRole: UserRole) => {
     switch (msgRole) {
       case 'admin':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800">Quản Trị</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+            Quản Trị
+          </span>
+        );
       case 'manager':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">Quản Lý</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+            Quản Lý
+          </span>
+        );
       case 'cashier':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800">Thu Ngân</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
+            Thu Ngân
+          </span>
+        );
       case 'warehouse':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800">Thủ Kho</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+            Thủ Kho
+          </span>
+        );
       case 'accountant':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">Kế Toán</span>;
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+            Kế Toán
+          </span>
+        );
       default:
         return null;
     }
   };
 
   return (
-    <div className="w-full p-6 space-y-6">
+    <div className="w-full p-6 space-y-6" onPaste={handlePaste}>
       {/* HEADER SECTION */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <MessageSquare className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-            <span>Phòng Chat Nội Bộ Doanh Nghiệp</span>
+            <span>{t.title}</span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Trực tuyến realtime
+              {t.activeNow}
             </span>
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Kênh trao đổi công việc tức thời giữa Thu ngân, Thủ kho, Kế toán và Ban điều hành
-          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t.subtitle}</p>
         </div>
 
-        {/* Current user profile preview */}
-        <div className="flex items-center gap-3 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-bold text-xs flex items-center justify-center shadow-xs">
-            {currentUser?.name?.charAt(0) || 'L'}
+        {/* Top Controls: Language Switcher & User Profile */}
+        <div className="flex items-center gap-3">
+          {/* LANGUAGE SELECTOR */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowLangMenu(!showLangMenu)}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-400 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+              title="Chuyển đổi ngôn ngữ / Switch Language"
+            >
+              <Globe className="w-4 h-4 text-indigo-500" />
+              <span className="text-sm">{SUPPORTED_LANGUAGES.find((l) => l.code === chatLang)?.flag}</span>
+              <span>{SUPPORTED_LANGUAGES.find((l) => l.code === chatLang)?.label}</span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+            </button>
+
+            {showLangMenu && (
+              <div className="absolute right-0 top-full mt-2 w-48 py-1.5 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 animate-in fade-in zoom-in-95">
+                <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Ngôn Ngữ / Language
+                </div>
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <button
+                    key={lang.code}
+                    type="button"
+                    onClick={() => handleSetLang(lang.code)}
+                    className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2.5 hover:bg-indigo-50 dark:hover:bg-slate-700/60 transition-colors cursor-pointer ${
+                      chatLang === lang.code
+                        ? 'text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50/50 dark:bg-slate-700/40'
+                        : 'text-slate-700 dark:text-slate-200'
+                    }`}
+                  >
+                    <span className="text-base">{lang.flag}</span>
+                    <span className="flex-1">{lang.label}</span>
+                    {chatLang === lang.code && (
+                      <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div>
-            <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-              <span>{currentUser?.name || 'Lê Thanh Long'}</span>
-              {getRoleBadge(role || 'admin')}
+
+          {/* User profile preview */}
+          <div className="flex items-center gap-3 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+              {currentUser?.name?.charAt(0) || 'L'}
             </div>
-            <div className="text-[10px] text-slate-400 font-mono">
-              {currentUser?.email || 'admin@nexus-erp.vn'}
+            <div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <span>{currentUser?.name || 'Lê Thanh Long'}</span>
+                {getRoleBadge(role || 'admin')}
+              </div>
+              <div className="text-[10px] text-slate-400 font-mono">
+                {currentUser?.email || 'admin@nexus-erp.vn'}
+              </div>
             </div>
           </div>
         </div>
@@ -213,47 +405,49 @@ export const InternalChatView: React.FC = () => {
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
                 placeholder="Tìm tin nhắn hoặc nhân viên..."
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
           </div>
 
-          {/* Navigation tab switch */}
-          <div className="flex border-b border-slate-200 dark:border-slate-800 px-3 pt-2 gap-2">
+          {/* Sub-tabs: Channels vs Colleagues */}
+          <div className="px-3 pt-3 flex gap-2 border-b border-slate-200 dark:border-slate-800">
             <button
               onClick={() => setSidebarTab('channels')}
-              className={`pb-2 px-2 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+              className={`flex-1 pb-2 text-xs font-bold text-center border-b-2 transition-all cursor-pointer ${
                 sidebarTab === 'channels'
                   ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                   : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              Kênh Thảo Luận ({CHANNELS.length})
+              {t.channelsTab}
             </button>
             <button
               onClick={() => setSidebarTab('direct')}
-              className={`pb-2 px-2 text-xs font-bold transition-all border-b-2 cursor-pointer ${
+              className={`flex-1 pb-2 text-xs font-bold text-center border-b-2 transition-all cursor-pointer ${
                 sidebarTab === 'direct'
                   ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                   : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              Tin Nhắn Trực Tiếp ({employees.length})
+              {t.directTab}
             </button>
           </div>
 
-          {/* List content */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {/* List items */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-1">
             {sidebarTab === 'channels' ? (
               <>
                 <div className="px-2 py-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                  Kênh Chuyên Môn
+                  {t.channelsHeader}
                 </div>
                 {CHANNELS.map((ch) => {
                   const isActive = activeChatChannelId === ch.id;
                   const unread = chatMessages.filter(
-                    (m) => m.channelId === ch.id && m.senderId !== (currentUser?.id || 'usr_admin_01')
+                    (m) =>
+                      m.channelId === ch.id && m.senderId !== (currentUser?.id || 'usr_admin_01')
                   ).length;
+                  const chInfo = t[ch.nameKey];
 
                   return (
                     <button
@@ -271,13 +465,15 @@ export const InternalChatView: React.FC = () => {
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span className="text-base shrink-0">{ch.icon}</span>
                         <div className="min-w-0">
-                          <div className="text-xs truncate">{ch.name}</div>
+                          <div className="text-xs truncate">{chInfo.name}</div>
                           <div
                             className={`text-[10px] truncate ${
-                              isActive ? 'text-indigo-100 opacity-90' : 'text-slate-400 dark:text-slate-500'
+                              isActive
+                                ? 'text-indigo-100 opacity-90'
+                                : 'text-slate-400 dark:text-slate-500'
                             }`}
                           >
-                            {ch.desc}
+                            {chInfo.desc}
                           </div>
                         </div>
                       </div>
@@ -293,7 +489,7 @@ export const InternalChatView: React.FC = () => {
             ) : (
               <>
                 <div className="px-2 py-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                  Nhân Sự Trong Doanh Nghiệp
+                  {t.colleaguesHeader}
                 </div>
                 {employees.map((emp) => {
                   const dmId = `dm_${emp.id}`;
@@ -349,7 +545,7 @@ export const InternalChatView: React.FC = () => {
                   <span>{currentChannel.name}</span>
                   <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Đang hoạt động
+                    {t.activeNow}
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{currentChannel.desc}</p>
@@ -368,14 +564,16 @@ export const InternalChatView: React.FC = () => {
             {currentMessages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 dark:text-slate-500">
                 <MessageCircle className="w-12 h-12 stroke-1 mb-2 text-slate-300 dark:text-slate-600" />
-                <p className="text-sm font-semibold">Kênh này chưa có trao đổi nào.</p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Nhập nội dung vào thanh chat bên dưới để gửi tin nhắn đầu tiên!
-                </p>
+                <p className="text-sm font-semibold">{t.noMessages}</p>
+                <p className="text-xs text-slate-400 mt-1">{t.noMessagesSub}</p>
               </div>
             ) : (
               currentMessages.map((msg) => {
                 const isMe = msg.senderId === (currentUser?.id || 'usr_admin_01');
+                const isTranslated = translatedMessages[msg.id];
+                const displayedText = isTranslated
+                  ? translateMessage(msg.content, chatLang)
+                  : msg.content;
 
                 return (
                   <div
@@ -385,10 +583,27 @@ export const InternalChatView: React.FC = () => {
                     {/* Header */}
                     <div className="flex items-center gap-2 mb-1 px-1 text-xs">
                       <span className="font-bold text-slate-800 dark:text-slate-200">
-                        {isMe ? 'Bạn' : msg.senderName}
+                        {isMe ? t.you : msg.senderName}
                       </span>
                       {!isMe && getRoleBadge(msg.senderRole)}
                       <span className="text-[11px] text-slate-400">{msg.timestamp}</span>
+
+                      {/* Translate button */}
+                      {msg.content && (
+                        <button
+                          type="button"
+                          onClick={() => toggleTranslate(msg.id)}
+                          className={`ml-1 px-1.5 py-0.5 rounded text-[10px] flex items-center gap-1 transition-all cursor-pointer ${
+                            isTranslated
+                              ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold'
+                              : 'text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                          title={isTranslated ? t.showOriginal : `${t.translateBtn} (${chatLang.toUpperCase()})`}
+                        >
+                          <Languages className="w-3 h-3" />
+                          <span>{isTranslated ? t.showOriginal : t.translateBtn}</span>
+                        </button>
+                      )}
                     </div>
 
                     {/* Bubble */}
@@ -407,34 +622,90 @@ export const InternalChatView: React.FC = () => {
                               : 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
                           }`}
                         >
-                          {msg.tag}
+                          {t.tags[msg.tag] || msg.tag}
                         </span>
                       )}
 
-                      <span className="whitespace-pre-wrap text-sm">{msg.content}</span>
+                      {displayedText && (
+                        <span className="whitespace-pre-wrap text-sm">{displayedText}</span>
+                      )}
 
-                      {/* Attachments preview */}
+                      {/* Translation bar */}
+                      {isTranslated && (
+                        <div className="mt-1.5 pt-1.5 border-t border-current/15 flex items-center justify-between text-[10px] opacity-85">
+                          <span className="font-semibold flex items-center gap-1">
+                            🌐 {t.translatedBadge} ({chatLang.toUpperCase()})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleTranslate(msg.id)}
+                            className="underline hover:opacity-100 cursor-pointer"
+                          >
+                            {t.showOriginal}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Attachments (Image, Order, Product) */}
                       {msg.attachments && msg.attachments.length > 0 && (
                         <div className="mt-2.5 space-y-1.5">
-                          {msg.attachments.map((att, attIdx) => (
-                            <div
-                              key={attIdx}
-                              className={`p-2.5 rounded-xl flex items-center gap-2.5 text-xs font-semibold border ${
-                                isMe
-                                  ? 'bg-white/10 border-white/20 text-white'
-                                  : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
-                              }`}
-                            >
-                              {att.type === 'order' && <Receipt className="w-4 h-4 text-amber-400 shrink-0" />}
-                              {att.type === 'product' && <Package className="w-4 h-4 text-indigo-400 shrink-0" />}
-                              <span>{att.title}</span>
-                              {att.code && (
-                                <span className="font-mono text-[10px] opacity-80 shrink-0">
-                                  ({att.code})
-                                </span>
-                              )}
-                            </div>
-                          ))}
+                          {msg.attachments.map((att, attIdx) => {
+                            if (att.type === 'image' && att.url) {
+                              return (
+                                <div key={attIdx} className="relative group/img">
+                                  <img
+                                    src={att.url}
+                                    alt={att.title || 'Hình ảnh'}
+                                    onClick={() =>
+                                      setPreviewModalImg({
+                                        url: att.url!,
+                                        title: att.title || 'Hình ảnh đính kèm',
+                                      })
+                                    }
+                                    className="max-h-72 w-auto max-w-full rounded-xl object-contain cursor-pointer shadow-sm hover:opacity-95 transition-all border border-slate-200/40 dark:border-slate-700/40 bg-black/5"
+                                  />
+                                  <div className="flex items-center justify-between mt-1 text-[11px] opacity-80">
+                                    <span className="truncate max-w-xs">{att.title}</span>
+                                    <span
+                                      className="underline text-[10px] cursor-pointer hover:opacity-100"
+                                      onClick={() =>
+                                        setPreviewModalImg({
+                                          url: att.url!,
+                                          title: att.title || 'Hình ảnh',
+                                        })
+                                      }
+                                    >
+                                      {t.previewImage}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div
+                                key={attIdx}
+                                className={`p-2.5 rounded-xl flex items-center gap-2.5 text-xs font-semibold border ${
+                                  isMe
+                                    ? 'bg-white/10 border-white/20 text-white'
+                                    : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                                }`}
+                              >
+                                {att.type === 'order' && (
+                                  <Receipt className="w-4 h-4 text-amber-400 shrink-0" />
+                                )}
+                                {att.type === 'product' && (
+                                  <Package className="w-4 h-4 text-indigo-400 shrink-0" />
+                                )}
+                                <span>{att.title}</span>
+                                {att.code && (
+                                  <span className="font-mono text-[10px] opacity-80 shrink-0">
+                                    ({att.code})
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -485,8 +756,8 @@ export const InternalChatView: React.FC = () => {
 
           {/* Quick reply templates */}
           <div className="px-6 py-2 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
-            <span className="text-xs font-bold text-slate-400 shrink-0">Gợi ý phản hồi nhanh:</span>
-            {QUICK_TEMPLATES.map((tmpl, idx) => (
+            <span className="text-xs font-bold text-slate-400 shrink-0">{t.quickSuggestions}</span>
+            {t.suggestions.map((tmpl, idx) => (
               <button
                 key={idx}
                 onClick={() => {
@@ -504,24 +775,83 @@ export const InternalChatView: React.FC = () => {
           <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
             {/* Tag selector chips */}
             <div className="flex items-center gap-2 mb-2.5 overflow-x-auto no-scrollbar">
-              <span className="text-xs text-slate-400 shrink-0 font-medium">Gửi tag tới:</span>
-              {QUICK_TAGS.map((t) => (
+              <span className="text-xs text-slate-400 shrink-0 font-medium">{t.tagDepartment}</span>
+              {QUICK_TAGS.map((tagItem) => (
                 <button
-                  key={t.tag}
-                  onClick={() => setSelectedTag(selectedTag === t.tag ? null : t.tag)}
+                  key={tagItem.tag}
+                  onClick={() =>
+                    setSelectedTag(selectedTag === tagItem.tag ? null : tagItem.tag)
+                  }
                   className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    selectedTag === t.tag
+                    selectedTag === tagItem.tag
                       ? 'bg-indigo-600 text-white shadow-2xs'
-                      : `${t.color} hover:opacity-80`
+                      : `${tagItem.color} hover:opacity-80`
                   }`}
                 >
-                  {t.label}
+                  {t.tags[tagItem.tag] || tagItem.tag}
                 </button>
               ))}
             </div>
 
+            {/* Selected Image Preview Chip */}
+            {selectedImage && (
+              <div className="mb-2.5 p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-indigo-200 dark:border-indigo-900/60 flex items-center justify-between gap-3 animate-in fade-in zoom-in-95">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-indigo-300 dark:border-indigo-700 shrink-0 bg-black/10">
+                    <img
+                      src={selectedImage.previewUrl}
+                      alt={selectedImage.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                      {selectedImage.title}
+                    </div>
+                    <div className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                      {t.imageAttached} • {t.pasteImageTip}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedImage(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                  title={t.removeImage}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             {/* Input field */}
             <div className="flex items-center gap-2.5">
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+
+              {/* Attach Image Button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={`p-3 rounded-xl border transition-all cursor-pointer shrink-0 ${
+                  selectedImage
+                    ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-400 text-indigo-600 dark:text-indigo-400'
+                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400'
+                }`}
+                title={t.attachImage}
+              >
+                <ImagePlus className="w-5 h-5" />
+              </button>
+
               <div className="relative flex-1">
                 <input
                   ref={inputRef}
@@ -529,7 +859,7 @@ export const InternalChatView: React.FC = () => {
                   value={inputContent}
                   onChange={(e) => setInputContent(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={`Gõ tin nhắn gửi tới ${currentChannel.name}... (Nhấn Enter để gửi)`}
+                  placeholder={t.typePlaceholder}
                   className="w-full pl-4 pr-10 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 />
 
@@ -537,7 +867,7 @@ export const InternalChatView: React.FC = () => {
                   type="button"
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-amber-500 cursor-pointer transition-colors"
-                  title="Biểu tượng cảm xúc"
+                  title="Emoji"
                 >
                   <Smile className="w-5 h-5" />
                 </button>
@@ -545,10 +875,10 @@ export const InternalChatView: React.FC = () => {
 
               <button
                 onClick={handleSend}
-                disabled={!inputContent.trim()}
+                disabled={!inputContent.trim() && !selectedImage}
                 className="px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold flex items-center gap-2 shadow-sm hover:shadow-indigo-500/25 active:scale-95 transition-all cursor-pointer shrink-0"
               >
-                <span>Gửi</span>
+                <span>{t.send}</span>
                 <Send className="w-4 h-4" />
               </button>
             </div>
@@ -574,6 +904,52 @@ export const InternalChatView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* FULLSCREEN IMAGE LIGHTBOX MODAL */}
+      {previewModalImg && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setPreviewModalImg(null)}
+        >
+          <div
+            className="relative max-w-5xl w-full max-h-[90vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2.5 truncate max-w-md">
+                <ImageIcon className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span className="text-sm font-semibold truncate">{previewModalImg.title}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewModalImg.url}
+                  download={previewModalImg.title || 'chat-image.jpg'}
+                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-semibold"
+                  title={t.downloadImage}
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{t.downloadImage}</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewModalImg(null)}
+                  className="p-2 rounded-lg bg-slate-800 hover:bg-rose-950 text-slate-300 hover:text-rose-400 transition-colors"
+                  title={t.close}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/50">
+              <img
+                src={previewModalImg.url}
+                alt={previewModalImg.title}
+                className="max-h-[78vh] max-w-full object-contain rounded-lg shadow-xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

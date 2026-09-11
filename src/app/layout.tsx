@@ -13,8 +13,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NEXUS ERP - Hệ Thống Bán Lẻ & Phân Phối Dầu Nhờn DMS",
-  description: "Giải pháp quản lý chuỗi bán lẻ, đại lý phân phối, tồn kho đa đơn vị, công nợ và POS bán hàng.",
+  title: "NEXUS ERP - Hệ Thống Quản Lý Bán Lẻ & Chuỗi Phân Phối Chuyên Nghiệp",
+  description: "Giải pháp ERP toàn diện: POS đa quầy, quản trị công nợ & tuổi nợ B2B, quản lý kho đa đơn vị tính, chống thất thoát hàng hóa.",
   manifest: "/manifest.json",
 };
 

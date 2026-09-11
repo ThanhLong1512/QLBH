@@ -20,6 +20,22 @@ export async function GET(request: Request) {
     });
 
     if (!user || user.status !== "active") {
+      if (authUser.userId.startsWith("usr-demo-")) {
+        return NextResponse.json({
+          success: true,
+          data: {
+            id: authUser.userId,
+            name: authUser.name,
+            email: authUser.email,
+            phone: "0900000000",
+            role: authUser.role,
+            roleTitle: authUser.role,
+            businessName: "Tập Đoàn Bán Lẻ & Phân Phối NEXUS",
+            businessScale: "Chuỗi 10+ Chi Nhánh & Kho Tổng",
+            permissions: authUser.permissions,
+          },
+        });
+      }
       return NextResponse.json(
         { success: false, error: "Tài khoản không tồn tại hoặc đã bị vô hiệu hóa" },
         { status: 403 }

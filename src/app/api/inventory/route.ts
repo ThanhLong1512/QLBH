@@ -365,12 +365,8 @@ export async function POST(request: Request) {
             if (it.productId && typeof it.actualStock === "number") {
               const actualStock = Math.max(0, it.actualStock);
 
-              await tx.product.updateMany({
-                where: { id: it.productId },
-                data: {
-                  stockBaseUnits: actualStock,
-                },
-              });
+              let discrepancy = 0;
+              let balanceBefore = 0;
 
               if (effectiveWhId) {
                 const curBal = await tx.stockBalance.findUnique({
@@ -382,8 +378,8 @@ export async function POST(request: Request) {
                   },
                 });
 
-                const balanceBefore = curBal ? curBal.quantity : 0;
-                const discrepancy = actualStock - balanceBefore;
+                balanceBefore = curBal ? curBal.quantity : 0;
+                discrepancy = actualStock - balanceBefore;
 
                 await tx.stockBalance.upsert({
                   where: {
@@ -399,8 +395,23 @@ export async function POST(request: Request) {
                     quantity: actualStock,
                   },
                 });
+              } else {
+                const currentProd = await tx.product.findUnique({ where: { id: it.productId } });
+                balanceBefore = currentProd ? currentProd.stockBaseUnits : 0;
+                discrepancy = actualStock - balanceBefore;
+              }
 
-                if (discrepancy !== 0) {
+              // Adjust enterprise total stockBaseUnits by the net discrepancy delta in this warehouse
+              if (discrepancy !== 0) {
+                await tx.product.updateMany({
+                  where: { id: it.productId },
+                  data: {
+                    stockBaseUnits: { increment: discrepancy },
+                  },
+                });
+              }
+
+                if (discrepancy !== 0 && effectiveWhId) {
                   await tx.stockLedger.create({
                     data: {
                       code: `TK-PKK-${code}-${it.sku || it.productId.slice(-4)}-${Date.now().toString().slice(-4)}`,
@@ -420,7 +431,6 @@ export async function POST(request: Request) {
                     },
                   });
                 }
-              }
             }
           }
         }

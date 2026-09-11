@@ -40,6 +40,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  devIndicators: false,
   // Ensure transpilePackages if any ESM packages need Next.js bundle resolution
   transpilePackages: ["lucide-react"],
   // Optimize package imports

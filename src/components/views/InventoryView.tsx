@@ -82,10 +82,9 @@ export const InventoryView: React.FC = () => {
   const [outboundPageSize, setOutboundPageSize] = useState(8);
 
   // Modals
-  const [isInboundModalOpen, setIsInboundModalOpen] = useState(false);
-  const [isOutboundModalOpen, setIsOutboundModalOpen] = useState(false);
+  const [isUnifiedModalOpen, setIsUnifiedModalOpen] = useState(false);
+  const [ticketType, setTicketType] = useState<'inbound' | 'outbound' | 'transfer'>('inbound');
   const [isStockAlertModalOpen, setIsStockAlertModalOpen] = useState(false);
-  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [selectedInboundDetail, setSelectedInboundDetail] = useState<StockInboundReceipt | null>(null);
   const [selectedOutboundDetail, setSelectedOutboundDetail] = useState<StockOutboundReceipt | null>(null);
   const [selectedTransferDetail, setSelectedTransferDetail] = useState<WarehouseTransfer | null>(null);
@@ -109,6 +108,7 @@ export const InventoryView: React.FC = () => {
   const [transferStatusFilter, setTransferStatusFilter] = useState<'all' | 'in_transit' | 'completed' | 'pending'>('all');
   const [transferPage, setTransferPage] = useState(1);
   const [transferPageSize, setTransferPageSize] = useState(8);
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
 
   // Stocktake View Mode & State
   const [stocktakeViewMode, setStocktakeViewMode] = useState<'active' | 'history'>('active');
@@ -215,38 +215,113 @@ export const InventoryView: React.FC = () => {
     return filteredOutbounds.slice(start, start + outboundPageSize);
   }, [filteredOutbounds, outboundPage, outboundPageSize]);
 
-  // Handle open Inbound Modal
-  const handleOpenInboundModal = () => {
-    if (suppliers.length === 0) {
-      showToast('⚠️ Vui lòng tạo ít nhất một nhà cung cấp trước');
-      return;
+  // Unified Ticket Modal Handlers
+  const handleOpenUnifiedModal = (type: 'inbound' | 'outbound' | 'transfer' = 'inbound') => {
+    setTicketType(type);
+    if (type === 'inbound') {
+      if (suppliers.length > 0 && !inboundSupplierId) {
+        setInboundSupplierId(suppliers[0].id);
+      }
+      if (inboundItems.length === 0 && products.length > 0) {
+        const initialItemProduct = products[0];
+        setInboundItems([
+          {
+            productId: initialItemProduct.id,
+            productName: initialItemProduct.name,
+            unitName: initialItemProduct.baseUnit,
+            conversionRate: 1,
+            quantity: 10,
+            unitCost: initialItemProduct.costPrice,
+            batchNumber: `LÔ-${new Date().toISOString().slice(2, 7).replace('-', '')}`,
+            expiryDate: new Date(Date.now() + 180 * 86400000).toISOString().slice(0, 10)
+          }
+        ]);
+        setInboundPaidAmount(initialItemProduct.costPrice * 10);
+      }
+    } else if (type === 'outbound') {
+      if (outboundItems.length === 0 && products.length > 0) {
+        const initialProd = products[0];
+        setOutboundItems([
+          {
+            productId: initialProd.id,
+            productName: initialProd.name,
+            unitName: initialProd.baseUnit,
+            quantity: 1
+          }
+        ]);
+      }
+    } else if (type === 'transfer') {
+      if (transferItems.length === 0 && products.length > 0) {
+        const p = products[0];
+        setTransferItems([
+          {
+            productId: p.id,
+            productName: p.name,
+            unitName: p.baseUnit,
+            conversionRate: 1,
+            quantity: 1,
+            unitCost: p.costPrice
+          }
+        ]);
+      }
     }
-    const defaultSup = suppliers[0];
-    setInboundSupplierId(defaultSup.id);
-
-    const initialItemProduct = products[0];
-    if (initialItemProduct) {
-      setInboundItems([
-        {
-          productId: initialItemProduct.id,
-          productName: initialItemProduct.name,
-          unitName: initialItemProduct.baseUnit,
-          conversionRate: 1,
-          quantity: 10,
-          unitCost: initialItemProduct.costPrice,
-          batchNumber: `LÔ-${new Date().toISOString().slice(2, 7).replace('-', '')}`,
-          expiryDate: new Date(Date.now() + 180 * 86400000).toISOString().slice(0, 10)
-        }
-      ]);
-      setInboundPaidAmount(initialItemProduct.costPrice * 10);
-    } else {
-      setInboundItems([]);
-      setInboundPaidAmount(0);
-    }
-    setInboundPaymentMethod('bank_transfer');
-    setInboundNotes('');
-    setIsInboundModalOpen(true);
+    setIsUnifiedModalOpen(true);
   };
+
+  const handleSwitchTicketType = (type: 'inbound' | 'outbound' | 'transfer') => {
+    setTicketType(type);
+    if (type === 'inbound') {
+      if (suppliers.length > 0 && !inboundSupplierId) {
+        setInboundSupplierId(suppliers[0].id);
+      }
+      if (inboundItems.length === 0 && products.length > 0) {
+        const initialItemProduct = products[0];
+        setInboundItems([
+          {
+            productId: initialItemProduct.id,
+            productName: initialItemProduct.name,
+            unitName: initialItemProduct.baseUnit,
+            conversionRate: 1,
+            quantity: 10,
+            unitCost: initialItemProduct.costPrice,
+            batchNumber: `LÔ-${new Date().toISOString().slice(2, 7).replace('-', '')}`,
+            expiryDate: new Date(Date.now() + 180 * 86400000).toISOString().slice(0, 10)
+          }
+        ]);
+        setInboundPaidAmount(initialItemProduct.costPrice * 10);
+      }
+    } else if (type === 'outbound') {
+      if (outboundItems.length === 0 && products.length > 0) {
+        const initialProd = products[0];
+        setOutboundItems([
+          {
+            productId: initialProd.id,
+            productName: initialProd.name,
+            unitName: initialProd.baseUnit,
+            quantity: 1
+          }
+        ]);
+      }
+    } else if (type === 'transfer') {
+      if (transferItems.length === 0 && products.length > 0) {
+        const p = products[0];
+        setTransferItems([
+          {
+            productId: p.id,
+            productName: p.name,
+            unitName: p.baseUnit,
+            conversionRate: 1,
+            quantity: 1,
+            unitCost: p.costPrice
+          }
+        ]);
+      }
+    }
+  };
+
+  const handleOpenInboundModal = () => handleOpenUnifiedModal('inbound');
+  const handleOpenOutboundModal = () => handleOpenUnifiedModal('outbound');
+  const handleOpenTransferModal = () => handleOpenUnifiedModal('transfer');
 
   const calculateInboundTotal = useMemo(() => {
     return inboundItems.reduce((sum, item) => sum + item.quantity * item.unitCost, 0);
@@ -270,8 +345,9 @@ export const InventoryView: React.FC = () => {
     ]);
   };
 
-  const handleSaveInbound = (e: React.FormEvent) => {
+  const handleSaveInbound = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingTicket) return;
     const sup = suppliers.find(s => s.id === inboundSupplierId);
     if (!sup) {
       showToast('⚠️ Vui lòng chọn nhà cung cấp');
@@ -302,41 +378,28 @@ export const InventoryView: React.FC = () => {
       };
     });
 
-    addInboundReceipt({
-      date: new Date().toISOString().slice(0, 10),
-      supplierId: sup.id,
-      supplierName: sup.name,
-      creatorName: currentUser ? currentUser.name : 'Thủ Kho',
-      items: itemsPayload,
-      totalCost,
-      paidAmount: paid,
-      debtAmount: remainingDebt,
-      paymentMethod: inboundPaymentMethod,
-      notes: inboundNotes,
-      status: 'completed'
-    });
-    setIsInboundModalOpen(false);
-  };
+    try {
+      setIsSubmittingTicket(true);
+      const res = await addInboundReceipt({
+        date: new Date().toISOString().slice(0, 10),
+        supplierId: sup.id,
+        supplierName: sup.name,
+        creatorName: currentUser ? currentUser.name : 'Thủ Kho',
+        items: itemsPayload,
+        totalCost,
+        paidAmount: paid,
+        debtAmount: remainingDebt,
+        paymentMethod: inboundPaymentMethod,
+        notes: inboundNotes,
+        status: 'completed'
+      });
 
-  // Outbound Modal
-  const handleOpenOutboundModal = () => {
-    const initialProd = products[0];
-    if (initialProd) {
-      setOutboundItems([
-        {
-          productId: initialProd.id,
-          productName: initialProd.name,
-          unitName: initialProd.baseUnit,
-          quantity: 1
-        }
-      ]);
-    } else {
-      setOutboundItems([]);
+      if (res) {
+        setIsUnifiedModalOpen(false);
+      }
+    } finally {
+      setIsSubmittingTicket(false);
     }
-    setOutboundReason('internal_use');
-    setOutboundDestination('Chi nhánh Bình Tân');
-    setOutboundNotes('');
-    setIsOutboundModalOpen(true);
   };
 
   const handleAddOutboundItemRow = () => {
@@ -353,8 +416,9 @@ export const InventoryView: React.FC = () => {
     ]);
   };
 
-  const handleSaveOutbound = (e: React.FormEvent) => {
+  const handleSaveOutbound = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingTicket) return;
     if (outboundItems.length === 0) {
       showToast('⚠️ Phiếu xuất kho phải có ít nhất 1 mặt hàng');
       return;
@@ -402,18 +466,26 @@ export const InventoryView: React.FC = () => {
       }
     };
 
-    addOutboundReceipt({
-      date: new Date().toISOString().slice(0, 10),
-      creatorName: currentUser ? currentUser.name : 'Thủ Kho',
-      reason: outboundReason === 'damage' ? ('damaged' as any) : outboundReason,
-      reasonLabel: getReasonLabelText(outboundReason),
-      destination: outboundDestination,
-      items: itemsPayload,
-      totalCost: totalVal,
-      notes: outboundNotes,
-      status: 'completed'
-    });
-    setIsOutboundModalOpen(false);
+    try {
+      setIsSubmittingTicket(true);
+      const res = await addOutboundReceipt({
+        date: new Date().toISOString().slice(0, 10),
+        creatorName: currentUser ? currentUser.name : 'Thủ Kho',
+        reason: outboundReason === 'damage' ? ('damaged' as any) : outboundReason,
+        reasonLabel: getReasonLabelText(outboundReason),
+        destination: outboundDestination,
+        items: itemsPayload,
+        totalCost: totalVal,
+        notes: outboundNotes,
+        status: 'completed'
+      });
+
+      if (res) {
+        setIsUnifiedModalOpen(false);
+      }
+    } finally {
+      setIsSubmittingTicket(false);
+    }
   };
 
   // Filtered transfers
@@ -435,28 +507,6 @@ export const InventoryView: React.FC = () => {
   }, [filteredTransfers, transferPage, transferPageSize]);
 
   // Transfer Handlers
-  const handleOpenTransferModal = () => {
-    const p = products[0];
-    if (p) {
-      setTransferItems([
-        {
-          productId: p.id,
-          productName: p.name,
-          unitName: p.baseUnit,
-          conversionRate: 1,
-          quantity: 1,
-          unitCost: p.costPrice
-        }
-      ]);
-    } else {
-      setTransferItems([]);
-    }
-    setTransferSource('Kho Tổng');
-    setTransferTarget('Chi nhánh Bình Tân');
-    setTransferNotes('');
-    setIsTransferModalOpen(true);
-  };
-
   const handleAddTransferItemRow = () => {
     const p = products[0];
     if (!p) return;
@@ -473,8 +523,9 @@ export const InventoryView: React.FC = () => {
     ]);
   };
 
-  const handleSaveTransfer = (e: React.FormEvent) => {
+  const handleSaveTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingTicket) return;
     if (transferItems.length === 0) {
       showToast('⚠️ Phiếu chuyển kho phải có ít nhất 1 mặt hàng');
       return;
@@ -512,19 +563,26 @@ export const InventoryView: React.FC = () => {
       };
     });
 
-    addWarehouseTransfer({
-      date: new Date().toISOString().slice(0, 10),
-      sourceWarehouse: transferSource,
-      targetWarehouse: transferTarget,
-      creatorName: currentUser ? currentUser.name : 'Thủ Kho',
-      status: 'in_transit',
-      items: itemsPayload,
-      totalQuantity: totalQty,
-      totalCost: totalVal,
-      notes: transferNotes
-    });
+    try {
+      setIsSubmittingTicket(true);
+      const res = await addWarehouseTransfer({
+        date: new Date().toISOString().slice(0, 10),
+        sourceWarehouse: transferSource,
+        targetWarehouse: transferTarget,
+        creatorName: currentUser ? currentUser.name : 'Thủ Kho',
+        status: 'in_transit',
+        items: itemsPayload,
+        totalQuantity: totalQty,
+        totalCost: totalVal,
+        notes: transferNotes
+      });
 
-    setIsTransferModalOpen(false);
+      if (res) {
+        setIsUnifiedModalOpen(false);
+      }
+    } finally {
+      setIsSubmittingTicket(false);
+    }
   };
 
   // Convert LowStockAlerts into Inbound items
@@ -559,7 +617,8 @@ export const InventoryView: React.FC = () => {
     setInboundNotes('Nhập hàng bổ sung tự động theo đề xuất cảnh báo tồn kho tối thiểu');
 
     setIsStockAlertModalOpen(false);
-    setIsInboundModalOpen(true);
+    setTicketType('inbound');
+    setIsUnifiedModalOpen(true);
     showToast(`⚡ Đã tự động thêm ${convertedItems.length} mặt hàng thiếu vào Phiếu Nhập Kho!`);
   };
 
@@ -571,7 +630,7 @@ export const InventoryView: React.FC = () => {
     }));
   };
 
-  const handleReconcileStocktake = () => {
+  const handleReconcileStocktake = async () => {
     const targetProducts =
       stocktakeCategoryFilter === 'all'
         ? products
@@ -600,7 +659,7 @@ export const InventoryView: React.FC = () => {
 
     const totalDiffVal = items.reduce((sum, item) => sum + Math.abs(item.differenceValue), 0);
 
-    addStocktakeReport({
+    const res = await addStocktakeReport({
       date: new Date().toISOString().slice(0, 16).replace('T', ' '),
       warehouseLocation: stocktakeWarehouse,
       creatorName: currentUser ? currentUser.name : 'Ban Kiểm Kê',
@@ -612,9 +671,10 @@ export const InventoryView: React.FC = () => {
       balancedBy: currentUser ? currentUser.name : 'Quản Lý Kho'
     });
 
-    setStocktakeCounts({});
-    setStocktakeNotes('');
-    showToast('✅ Đã cân bằng số liệu tồn kho thành công và lưu biên bản CSDL!');
+    if (res) {
+      setStocktakeCounts({});
+      setStocktakeNotes('');
+    }
   };
 
   const exportStocktakeExcel = (report: StocktakeReport) => {
@@ -703,15 +763,6 @@ export const InventoryView: React.FC = () => {
             )}
           </button>
 
-          <button
-            id="create-transfer-btn"
-            onClick={handleOpenTransferModal}
-            className="px-3 py-2 text-xs font-semibold rounded-lg bg-sky-600 hover:bg-sky-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
-          >
-            <ArrowRightLeft className="w-4 h-4" />
-            Lập Phiếu Chuyển Kho
-          </button>
-
           {canExportExcel && (
             <button
               onClick={exportStockBalanceExcel}
@@ -723,21 +774,12 @@ export const InventoryView: React.FC = () => {
           )}
 
           <button
-            id="create-inbound-receipt-btn"
-            onClick={handleOpenInboundModal}
-            className="px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
+            id="create-unified-inventory-ticket-btn"
+            onClick={() => handleOpenUnifiedModal('inbound')}
+            className="px-3.5 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all active:scale-[0.98]"
           >
-            <ArrowDownLeft className="w-4 h-4" />
-            Lập Phiếu Nhập Kho
-          </button>
-
-          <button
-            id="create-outbound-receipt-btn"
-            onClick={handleOpenOutboundModal}
-            className="px-3 py-2 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
-          >
-            <ArrowUpRight className="w-4 h-4" />
-            Lập Phiếu Xuất Kho
+            <Plus className="w-4 h-4" />
+            Lập Phiếu Kho
           </button>
         </div>
       </div>
@@ -1600,8 +1642,8 @@ export const InventoryView: React.FC = () => {
                           <div className="flex items-center justify-center gap-1.5">
                             {t.status === 'in_transit' && (
                               <button
-                                onClick={() => {
-                                  updateTransferStatus(t.id, 'completed');
+                                onClick={async () => {
+                                  await updateTransferStatus(t.id, 'completed');
                                 }}
                                 className="px-2 py-1 text-[11px] font-bold rounded bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1"
                                 title="Xác nhận hàng đã về tới kho đích"
@@ -1639,384 +1681,626 @@ export const InventoryView: React.FC = () => {
         </div>
       )}
 
-      {/* CREATE INBOUND RECEIPT MODAL */}
-      {isInboundModalOpen && (
+      {/* UNIFIED INVENTORY TICKET MODAL */}
+      {isUnifiedModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            {/* Sticky Modal Header */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 px-6 py-4 backdrop-blur">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <ArrowDownLeft className="w-5 h-5 text-emerald-600" />
-                Lập Phiếu Nhập Kho Từ Nhà Cung Cấp
-              </h3>
+              <div className="flex items-center gap-3">
+                <div
+                  className={`p-2.5 rounded-xl border ${
+                    ticketType === 'inbound'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400'
+                      : ticketType === 'outbound'
+                      ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400'
+                      : 'bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800 text-sky-600 dark:text-sky-400'
+                  }`}
+                >
+                  {ticketType === 'inbound' && <ArrowDownLeft className="w-5 h-5" />}
+                  {ticketType === 'outbound' && <ArrowUpRight className="w-5 h-5" />}
+                  {ticketType === 'transfer' && <ArrowRightLeft className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    {ticketType === 'inbound' && 'Lập Phiếu Nhập Kho Hàng Hóa'}
+                    {ticketType === 'outbound' && 'Lập Phiếu Xuất Kho Nội Bộ / Xuất Hủy'}
+                    {ticketType === 'transfer' && 'Lập Phiếu Điều Chuyển Kho Liên Chi Nhánh'}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {ticketType === 'inbound' && 'Nhập hàng từ nhà cung ứng, cập nhật số lô, hạn dùng & công nợ đối tác'}
+                    {ticketType === 'outbound' && 'Xuất sử dụng nội bộ, tiêu hao hoặc xuất thanh lý hủy hàng lỗi'}
+                    {ticketType === 'transfer' && 'Luân chuyển hàng hóa giữa các chi nhánh hoặc kho trung chuyển'}
+                  </p>
+                </div>
+              </div>
               <button
-                onClick={() => setIsInboundModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                onClick={() => setIsUnifiedModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveInbound} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Chọn Nhà Cung Cấp Cung Ứng *
-                  </label>
-                  <select
-                    value={inboundSupplierId}
-                    onChange={e => setInboundSupplierId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
-                  >
-                    {suppliers.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.code}) - Nợ hiện tại: {s.currentDebt.toLocaleString('vi-VN')} đ
-                      </option>
-                    ))}
-                  </select>
-                </div>
+            {/* Segmented Option Switcher: Chọn Loại Phiếu */}
+            <div className="px-6 pt-4 pb-2 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/20">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                Chọn Loại Nghiệp Vụ Phiếu Kho:
+              </label>
+              <div className="grid grid-cols-3 gap-2 p-1.5 bg-slate-200/70 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => handleSwitchTicketType('inbound')}
+                  className={`py-2 px-3 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                    ticketType === 'inbound'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/60'
+                  }`}
+                >
+                  <ArrowDownLeft className="w-4 h-4" />
+                  <span>📥 Phiếu Nhập Kho</span>
+                </button>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Phương Thức Thanh Toán Khi Nhập *
-                  </label>
-                  <select
-                    value={inboundPaymentMethod}
-                    onChange={e => setInboundPaymentMethod(e.target.value as any)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
-                  >
-                    <option value="bank_transfer">Chuyển khoản thanh toán ngay</option>
-                    <option value="cash">Chi tiền mặt tại quỹ</option>
-                    <option value="debt">Ghi nợ 100% công nợ NCC</option>
-                  </select>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchTicketType('outbound')}
+                  className={`py-2 px-3 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                    ticketType === 'outbound'
+                      ? 'bg-rose-600 text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/60'
+                  }`}
+                >
+                  <ArrowUpRight className="w-4 h-4" />
+                  <span>📤 Phiếu Xuất Kho</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSwitchTicketType('transfer')}
+                  className={`py-2 px-3 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                    ticketType === 'transfer'
+                      ? 'bg-sky-600 text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/60'
+                  }`}
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  <span>🔄 Phiếu Chuyển Kho</span>
+                </button>
               </div>
+            </div>
 
-              {/* Items List */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white">
-                    Danh Sách Mặt Hàng Nhập Kho ({inboundItems.length})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddInboundItemRow}
-                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Thêm Dòng Sản Phẩm
-                  </button>
-                </div>
+            {/* Dynamic Unified Form Body */}
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                if (ticketType === 'inbound') {
+                  handleSaveInbound(e);
+                } else if (ticketType === 'outbound') {
+                  handleSaveOutbound(e);
+                } else if (ticketType === 'transfer') {
+                  handleSaveTransfer(e);
+                }
+              }}
+              className="p-6 space-y-4"
+            >
+              {/* CASE 1: INBOUND FIELDS */}
+              {ticketType === 'inbound' && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Chọn Nhà Cung Cấp Cung Ứng *
+                      </label>
+                      <select
+                        value={inboundSupplierId}
+                        onChange={e => setInboundSupplierId(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
+                      >
+                        {suppliers.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.code}) - Nợ hiện tại: {s.currentDebt.toLocaleString('vi-VN')} đ
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {inboundItems.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 grid grid-cols-1 sm:grid-cols-5 gap-2 items-center text-xs"
-                    >
-                      <div className="sm:col-span-2">
-                        <label className="text-[10px] text-slate-400 block">Sản phẩm</label>
-                        <select
-                          value={item.productId}
-                          onChange={e => {
-                            const p = products.find(prod => prod.id === e.target.value);
-                            if (p) {
-                              const newItems = [...inboundItems];
-                              newItems[idx].productId = p.id;
-                              newItems[idx].productName = p.name;
-                              newItems[idx].unitName = p.baseUnit;
-                              newItems[idx].unitCost = p.costPrice;
-                              setInboundItems(newItems);
-                            }
-                          }}
-                          className="w-full p-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-medium"
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Phương Thức Thanh Toán Khi Nhập *
+                      </label>
+                      <select
+                        value={inboundPaymentMethod}
+                        onChange={e => setInboundPaymentMethod(e.target.value as any)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
+                      >
+                        <option value="bank_transfer">Chuyển khoản thanh toán ngay</option>
+                        <option value="cash">Chi tiền mặt tại quỹ</option>
+                        <option value="debt">Ghi nợ 100% công nợ NCC</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Items List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        Danh Sách Mặt Hàng Nhập Kho ({inboundItems.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAddInboundItemRow}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Thêm Dòng Sản Phẩm
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {inboundItems.map((item, idx) => (
+                        <div
+                          key={idx}
+                          className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 grid grid-cols-1 sm:grid-cols-5 gap-2 items-center text-xs"
                         >
-                          {products.map(p => (
-                            <option key={p.id} value={p.id}>
-                              {p.name} ({p.sku})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                          <div className="sm:col-span-2">
+                            <label className="text-[10px] text-slate-400 block">Sản phẩm</label>
+                            <select
+                              value={item.productId}
+                              onChange={e => {
+                                const p = products.find(prod => prod.id === e.target.value);
+                                if (p) {
+                                  const newItems = [...inboundItems];
+                                  newItems[idx].productId = p.id;
+                                  newItems[idx].productName = p.name;
+                                  newItems[idx].unitName = p.baseUnit;
+                                  newItems[idx].unitCost = p.costPrice;
+                                  setInboundItems(newItems);
+                                }
+                              }}
+                              className="w-full p-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-medium"
+                            >
+                              {products.map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} ({p.sku})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-                      <div>
-                        <label className="text-[10px] text-slate-400 block">Số lượng ({item.unitName})</label>
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={e => {
-                            const newItems = [...inboundItems];
-                            newItems[idx].quantity = Number(e.target.value);
-                            setInboundItems(newItems);
-                          }}
-                          className="w-full p-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
-                        />
-                      </div>
+                          <div>
+                            <label className="text-[10px] text-slate-400 block">Số lượng ({item.unitName})</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={item.quantity}
+                              onChange={e => {
+                                const newItems = [...inboundItems];
+                                newItems[idx].quantity = Number(e.target.value);
+                                setInboundItems(newItems);
+                              }}
+                              className="w-full p-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                            />
+                          </div>
 
-                      <div>
-                        <label className="text-[10px] text-slate-400 block">Đơn giá vốn (VNĐ)</label>
+                          <div>
+                            <label className="text-[10px] text-slate-400 block">Đơn giá vốn (VNĐ)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={item.unitCost}
+                              onChange={e => {
+                                const newItems = [...inboundItems];
+                                newItems[idx].unitCost = Number(e.target.value);
+                                setInboundItems(newItems);
+                              }}
+                              className="w-full p-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-0">
+                            <span className="font-bold text-slate-900 dark:text-white">
+                              {(item.quantity * item.unitCost).toLocaleString('vi-VN')} đ
+                            </span>
+                            {inboundItems.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setInboundItems(inboundItems.filter((_, i) => i !== idx))}
+                                className="p-1 text-slate-400 hover:text-rose-600"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Payment details */}
+                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+                    <div className="flex justify-between items-center text-slate-700 dark:text-slate-300">
+                      <span>Tổng tiền hàng nhập kho:</span>
+                      <span className="text-base font-bold text-slate-900 dark:text-white">
+                        {calculateInboundTotal.toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
+
+                    {inboundPaymentMethod !== 'debt' && (
+                      <div className="flex justify-between items-center">
+                        <label className="text-slate-700 dark:text-slate-300 font-medium">
+                          Số tiền thực trả cho NCC:
+                        </label>
                         <input
                           type="number"
                           min={0}
-                          value={item.unitCost}
-                          onChange={e => {
-                            const newItems = [...inboundItems];
-                            newItems[idx].unitCost = Number(e.target.value);
-                            setInboundItems(newItems);
-                          }}
-                          className="w-full p-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          max={calculateInboundTotal}
+                          value={inboundPaidAmount}
+                          onChange={e => setInboundPaidAmount(Number(e.target.value))}
+                          className="w-40 px-2.5 py-1 text-right text-xs font-bold rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-emerald-600"
                         />
                       </div>
+                    )}
 
-                      <div className="flex items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-0">
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          {(item.quantity * item.unitCost).toLocaleString('vi-VN')} đ
-                        </span>
-                        {inboundItems.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => setInboundItems(inboundItems.filter((_, i) => i !== idx))}
-                            className="p-1 text-slate-400 hover:text-rose-600"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
+                    <div className="flex justify-between items-center text-rose-600 font-semibold pt-1 border-t border-slate-200 dark:border-slate-700">
+                      <span>Ghi nợ NCC (Khoản phải trả sau):</span>
+                      <span>
+                        {inboundPaymentMethod === 'debt'
+                          ? `${calculateInboundTotal.toLocaleString('vi-VN')} đ`
+                          : `${Math.max(0, calculateInboundTotal - inboundPaidAmount).toLocaleString('vi-VN')} đ`}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
 
-              {/* Payment details */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
-                <div className="flex justify-between items-center text-slate-700 dark:text-slate-300">
-                  <span>Tổng tiền hàng nhập kho:</span>
-                  <span className="text-base font-bold text-slate-900 dark:text-white">
-                    {calculateInboundTotal.toLocaleString('vi-VN')} đ
-                  </span>
-                </div>
-
-                {inboundPaymentMethod !== 'debt' && (
-                  <div className="flex justify-between items-center">
-                    <label className="text-slate-700 dark:text-slate-300 font-medium">
-                      Số tiền thực trả cho NCC:
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Ghi Chú Nhập Kho
                     </label>
                     <input
-                      type="number"
-                      min={0}
-                      max={calculateInboundTotal}
-                      value={inboundPaidAmount}
-                      onChange={e => setInboundPaidAmount(Number(e.target.value))}
-                      className="w-40 px-2.5 py-1 text-right text-xs font-bold rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-emerald-600"
+                      type="text"
+                      value={inboundNotes}
+                      onChange={e => setInboundNotes(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                      placeholder="Ghi chú số hóa đơn đỏ, số biên bản giao nhận..."
                     />
                   </div>
+                </>
+              )}
+
+              {/* CASE 2: OUTBOUND FIELDS */}
+              {ticketType === 'outbound' && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Lý Do Xuất Kho *
+                      </label>
+                      <select
+                        value={outboundReason}
+                        onChange={e => setOutboundReason(e.target.value as any)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      >
+                        <option value="internal_use">Sử dụng nội bộ / Văn phòng phẩm</option>
+                        <option value="transfer">Điều chuyển chi nhánh / Kho khác</option>
+                        <option value="damage">Xuất hủy hàng hỏng vỡ / Hết hạn</option>
+                        <option value="other">Xuất mục đích khác</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Địa Điểm Đến / Người Nhận *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={outboundDestination}
+                        onChange={e => setOutboundDestination(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                        placeholder="VD: Chi nhánh Bình Tân, Phòng Hành Chính..."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Items List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        Mặt Hàng Xuất Kho ({outboundItems.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAddOutboundItemRow}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Thêm Dòng Sản Phẩm
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {outboundItems.map((item, idx) => {
+                        const prod = products.find(p => p.id === item.productId);
+                        return (
+                          <div
+                            key={idx}
+                            className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 grid grid-cols-1 sm:grid-cols-4 gap-2 items-center text-xs"
+                          >
+                            <div className="sm:col-span-2">
+                              <label className="text-[10px] text-slate-400 block">Sản phẩm</label>
+                              <select
+                                value={item.productId}
+                                onChange={e => {
+                                  const p = products.find(pr => pr.id === e.target.value);
+                                  if (p) {
+                                    const newItems = [...outboundItems];
+                                    newItems[idx].productId = p.id;
+                                    newItems[idx].productName = p.name;
+                                    newItems[idx].unitName = p.baseUnit;
+                                    setOutboundItems(newItems);
+                                  }
+                                }}
+                                className="w-full p-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                              >
+                                {products.map(p => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} (Tồn: {p.stockBaseUnits} {p.baseUnit})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] text-slate-400 block">
+                                SL Xuất (Tối đa: {prod?.stockBaseUnits || 0})
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={prod?.stockBaseUnits || 9999}
+                                value={item.quantity}
+                                onChange={e => {
+                                  const newItems = [...outboundItems];
+                                  newItems[idx].quantity = Number(e.target.value);
+                                  setOutboundItems(newItems);
+                                }}
+                                className="w-full p-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-end">
+                              {outboundItems.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setOutboundItems(outboundItems.filter((_, i) => i !== idx))}
+                                  className="p-1 text-slate-400 hover:text-rose-600"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Ghi Chú Xuất Kho
+                    </label>
+                    <input
+                      type="text"
+                      value={outboundNotes}
+                      onChange={e => setOutboundNotes(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                      placeholder="Ghi chú người duyệt, biên bản kiểm tra..."
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* CASE 3: TRANSFER FIELDS */}
+              {ticketType === 'transfer' && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Kho Xuất Hàng (Nguồn) *
+                      </label>
+                      <select
+                        value={transferSource}
+                        onChange={e => setTransferSource(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
+                      >
+                        <option value="Kho Tổng">Kho Tổng (Trụ sở)</option>
+                        <option value="Chi nhánh Bình Tân">Chi nhánh Bình Tân</option>
+                        <option value="Chi nhánh Quận 1">Chi nhánh Quận 1</option>
+                        <option value="Kho Thủ Đức">Kho Thủ Đức</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        Kho Nhận Hàng (Đích) *
+                      </label>
+                      <select
+                        value={transferTarget}
+                        onChange={e => setTransferTarget(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
+                      >
+                        <option value="Chi nhánh Bình Tân">Chi nhánh Bình Tân</option>
+                        <option value="Kho Tổng">Kho Tổng (Trụ sở)</option>
+                        <option value="Chi nhánh Quận 1">Chi nhánh Quận 1</option>
+                        <option value="Kho Thủ Đức">Kho Thủ Đức</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Items List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        Danh Sách Mặt Hàng Điều Chuyển ({transferItems.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAddTransferItemRow}
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-sky-300 dark:border-sky-800 text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/40 flex items-center gap-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Thêm Hàng
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {transferItems.map((it, index) => {
+                        const currentProd = products.find(p => p.id === it.productId);
+                        const maxStock = currentProd ? currentProd.stockBaseUnits : 0;
+
+                        return (
+                          <div
+                            key={index}
+                            className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 grid grid-cols-12 gap-3 items-center text-xs"
+                          >
+                            <div className="col-span-12 sm:col-span-6">
+                              <label className="text-[10px] text-slate-400 block mb-0.5">Sản phẩm</label>
+                              <select
+                                value={it.productId}
+                                onChange={e => {
+                                  const found = products.find(p => p.id === e.target.value);
+                                  if (found) {
+                                    const newItems = [...transferItems];
+                                    newItems[index] = {
+                                      productId: found.id,
+                                      productName: found.name,
+                                      unitName: found.baseUnit,
+                                      conversionRate: 1,
+                                      quantity: 1,
+                                      unitCost: found.costPrice
+                                    };
+                                    setTransferItems(newItems);
+                                  }
+                                }}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
+                              >
+                                {products.map(p => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} ({p.sku}) - Tồn kho: {p.stockBaseUnits} {p.baseUnit}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="col-span-6 sm:col-span-3">
+                              <label className="text-[10px] text-slate-400 block mb-0.5">
+                                Số lượng chuyển (Max: {maxStock})
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={maxStock}
+                                value={it.quantity}
+                                onChange={e => {
+                                  const val = Math.max(1, Number(e.target.value));
+                                  const newItems = [...transferItems];
+                                  newItems[index].quantity = val;
+                                  setTransferItems(newItems);
+                                }}
+                                className="w-full px-2.5 py-1.5 text-center font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                              />
+                            </div>
+
+                            <div className="col-span-5 sm:col-span-2 text-right">
+                              <label className="text-[10px] text-slate-400 block mb-0.5">Giá trị chuyển</label>
+                              <span className="font-bold text-slate-900 dark:text-white block truncate">
+                                {canViewCosts ? `${(it.quantity * it.unitCost).toLocaleString('vi-VN')} đ` : '•••• đ'}
+                              </span>
+                            </div>
+
+                            <div className="col-span-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (transferItems.length > 1) {
+                                    setTransferItems(transferItems.filter((_, i) => i !== index));
+                                  } else {
+                                    showToast('⚠️ Phiếu chuyển phải có ít nhất 1 mặt hàng');
+                                  }
+                                }}
+                                className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Ghi chú điều chuyển / Phương tiện vận chuyển
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={transferNotes}
+                      onChange={e => setTransferNotes(e.target.value)}
+                      placeholder="Ví dụ: Chuyển hàng hỗ trợ chi nhánh khai trương, giao bằng xe tải nội bộ..."
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Shared Modal Footer Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsUnifiedModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
+                >
+                  Hủy Bỏ
+                </button>
+
+                {ticketType === 'inbound' && (
+                  <button
+                    type="submit"
+                    disabled={isSubmittingTicket}
+                    className={`px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5 transition-colors ${
+                      isSubmittingTicket ? 'opacity-60 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{isSubmittingTicket ? 'Đang lưu...' : 'Xác Nhận Nhập Kho'}</span>
+                  </button>
                 )}
 
-                <div className="flex justify-between items-center text-rose-600 font-semibold pt-1 border-t border-slate-200 dark:border-slate-700">
-                  <span>Ghi nợ NCC (Khoản phải trả sau):</span>
-                  <span>
-                    {inboundPaymentMethod === 'debt'
-                      ? `${calculateInboundTotal.toLocaleString('vi-VN')} đ`
-                      : `${Math.max(0, calculateInboundTotal - inboundPaidAmount).toLocaleString('vi-VN')} đ`}
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Ghi Chú Nhập Kho
-                </label>
-                <input
-                  type="text"
-                  value={inboundNotes}
-                  onChange={e => setInboundNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                  placeholder="Ghi chú số hóa đơn đỏ, số biên bản giao nhận..."
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsInboundModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-                >
-                  Hủy Bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Xác Nhận Nhập Kho
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* CREATE OUTBOUND RECEIPT MODAL */}
-      {isOutboundModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 px-6 py-4 backdrop-blur">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <ArrowUpRight className="w-5 h-5 text-rose-600" />
-                Lập Phiếu Xuất Kho Nội Bộ / Xuất Hủy
-              </h3>
-              <button
-                onClick={() => setIsOutboundModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveOutbound} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Lý Do Xuất Kho *
-                  </label>
-                  <select
-                    value={outboundReason}
-                    onChange={e => setOutboundReason(e.target.value as any)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  >
-                    <option value="internal_use">Sử dụng nội bộ / Văn phòng phẩm</option>
-                    <option value="transfer">Điều chuyển chi nhánh / Kho khác</option>
-                    <option value="damage">Xuất hủy hàng hỏng vỡ / Hết hạn</option>
-                    <option value="other">Xuất mục đích khác</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Địa Điểm Đến / Người Nhận *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={outboundDestination}
-                    onChange={e => setOutboundDestination(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                    placeholder="VD: Chi nhánh Bình Tân, Phòng Hành Chính..."
-                  />
-                </div>
-              </div>
-
-              {/* Items List */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white">
-                    Mặt Hàng Xuất Kho ({outboundItems.length})
-                  </span>
+                {ticketType === 'outbound' && (
                   <button
-                    type="button"
-                    onClick={handleAddOutboundItemRow}
-                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1"
+                    type="submit"
+                    disabled={isSubmittingTicket}
+                    className={`px-5 py-2 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-sm flex items-center gap-1.5 transition-colors ${
+                      isSubmittingTicket ? 'opacity-60 cursor-not-allowed' : ''
+                    }`}
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    Thêm Dòng Sản Phẩm
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{isSubmittingTicket ? 'Đang lưu...' : 'Xác Nhận Xuất Kho'}</span>
                   </button>
-                </div>
+                )}
 
-                <div className="space-y-2">
-                  {outboundItems.map((item, idx) => {
-                    const prod = products.find(p => p.id === item.productId);
-                    return (
-                      <div
-                        key={idx}
-                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 grid grid-cols-1 sm:grid-cols-4 gap-2 items-center text-xs"
-                      >
-                        <div className="sm:col-span-2">
-                          <label className="text-[10px] text-slate-400 block">Sản phẩm</label>
-                          <select
-                            value={item.productId}
-                            onChange={e => {
-                              const p = products.find(pr => pr.id === e.target.value);
-                              if (p) {
-                                const newItems = [...outboundItems];
-                                newItems[idx].productId = p.id;
-                                newItems[idx].productName = p.name;
-                                newItems[idx].unitName = p.baseUnit;
-                                setOutboundItems(newItems);
-                              }
-                            }}
-                            className="w-full p-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
-                          >
-                            {products.map(p => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} (Tồn: {p.stockBaseUnits} {p.baseUnit})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] text-slate-400 block">
-                            SL Xuất (Tối đa: {prod?.stockBaseUnits || 0})
-                          </label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={prod?.stockBaseUnits || 9999}
-                            value={item.quantity}
-                            onChange={e => {
-                              const newItems = [...outboundItems];
-                              newItems[idx].quantity = Number(e.target.value);
-                              setOutboundItems(newItems);
-                            }}
-                            className="w-full p-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-bold"
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-end">
-                          {outboundItems.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => setOutboundItems(outboundItems.filter((_, i) => i !== idx))}
-                              className="p-1 text-slate-400 hover:text-rose-600"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Ghi Chú Xuất Kho
-                </label>
-                <input
-                  type="text"
-                  value={outboundNotes}
-                  onChange={e => setOutboundNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                  placeholder="Ghi chú người duyệt, biên bản kiểm tra..."
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsOutboundModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-                >
-                  Hủy Bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-sm flex items-center gap-1.5"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Xác Nhận Xuất Kho
-                </button>
+                {ticketType === 'transfer' && (
+                  <button
+                    type="submit"
+                    disabled={isSubmittingTicket}
+                    className={`px-5 py-2 text-xs font-semibold rounded-lg bg-sky-600 hover:bg-sky-700 text-white shadow-sm flex items-center gap-1.5 transition-colors ${
+                      isSubmittingTicket ? 'opacity-60 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    <Truck className="w-4 h-4" />
+                    <span>{isSubmittingTicket ? 'Đang lưu...' : 'Xác Nhận Xuất Chuyển Kho'}</span>
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -2150,194 +2434,6 @@ export const InventoryView: React.FC = () => {
         </div>
       )}
 
-      {/* CREATE TRANSFER MODAL */}
-      {isTransferModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 px-6 py-4 backdrop-blur">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <ArrowRightLeft className="w-5 h-5 text-sky-600" />
-                Lập Phiếu Chuyển Kho Nội Bộ Đa Chi Nhánh
-              </h3>
-              <button
-                onClick={() => setIsTransferModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveTransfer} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Kho Xuất Hàng (Nguồn) *
-                  </label>
-                  <select
-                    value={transferSource}
-                    onChange={e => setTransferSource(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
-                  >
-                    <option value="Kho Tổng">Kho Tổng (Trụ sở)</option>
-                    <option value="Chi nhánh Bình Tân">Chi nhánh Bình Tân</option>
-                    <option value="Chi nhánh Quận 1">Chi nhánh Quận 1</option>
-                    <option value="Kho Thủ Đức">Kho Thủ Đức</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Kho Nhận Hàng (Đích) *
-                  </label>
-                  <select
-                    value={transferTarget}
-                    onChange={e => setTransferTarget(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
-                  >
-                    <option value="Chi nhánh Bình Tân">Chi nhánh Bình Tân</option>
-                    <option value="Kho Tổng">Kho Tổng (Trụ sở)</option>
-                    <option value="Chi nhánh Quận 1">Chi nhánh Quận 1</option>
-                    <option value="Kho Thủ Đức">Kho Thủ Đức</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Items List */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white">
-                    Danh Sách Mặt Hàng Điều Chuyển ({transferItems.length})
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleAddTransferItemRow}
-                    className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-sky-300 dark:border-sky-800 text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/40 flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Thêm Hàng
-                  </button>
-                </div>
-
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {transferItems.map((it, index) => {
-                    const currentProd = products.find(p => p.id === it.productId);
-                    const maxStock = currentProd ? currentProd.stockBaseUnits : 0;
-
-                    return (
-                      <div
-                        key={index}
-                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 grid grid-cols-12 gap-3 items-center text-xs"
-                      >
-                        <div className="col-span-12 sm:col-span-6">
-                          <label className="text-[10px] text-slate-400 block mb-0.5">Sản phẩm</label>
-                          <select
-                            value={it.productId}
-                            onChange={e => {
-                              const found = products.find(p => p.id === e.target.value);
-                              if (found) {
-                                const newItems = [...transferItems];
-                                newItems[index] = {
-                                  productId: found.id,
-                                  productName: found.name,
-                                  unitName: found.baseUnit,
-                                  conversionRate: 1,
-                                  quantity: 1,
-                                  unitCost: found.costPrice
-                                };
-                                setTransferItems(newItems);
-                              }
-                            }}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
-                          >
-                            {products.map(p => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} ({p.sku}) - Tồn kho: {p.stockBaseUnits} {p.baseUnit}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="col-span-6 sm:col-span-3">
-                          <label className="text-[10px] text-slate-400 block mb-0.5">
-                            Số lượng chuyển (Max: {maxStock})
-                          </label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={maxStock}
-                            value={it.quantity}
-                            onChange={e => {
-                              const val = Math.max(1, Number(e.target.value));
-                              const newItems = [...transferItems];
-                              newItems[index].quantity = val;
-                              setTransferItems(newItems);
-                            }}
-                            className="w-full px-2.5 py-1.5 text-center font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                          />
-                        </div>
-
-                        <div className="col-span-5 sm:col-span-2 text-right">
-                          <label className="text-[10px] text-slate-400 block mb-0.5">Giá trị chuyển</label>
-                          <span className="font-bold text-slate-900 dark:text-white block truncate">
-                            {canViewCosts ? `${(it.quantity * it.unitCost).toLocaleString('vi-VN')} đ` : '•••• đ'}
-                          </span>
-                        </div>
-
-                        <div className="col-span-1 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (transferItems.length > 1) {
-                                setTransferItems(transferItems.filter((_, i) => i !== index));
-                              } else {
-                                showToast('⚠️ Phiếu chuyển phải có ít nhất 1 mặt hàng');
-                              }
-                            }}
-                            className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Ghi chú điều chuyển / Phương tiện vận chuyển
-                </label>
-                <textarea
-                  rows={2}
-                  value={transferNotes}
-                  onChange={e => setTransferNotes(e.target.value)}
-                  placeholder="Ví dụ: Chuyển hàng hỗ trợ chi nhánh khai trương, giao bằng xe tải nội bộ..."
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsTransferModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-                >
-                  Hủy Bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-semibold rounded-lg bg-sky-600 hover:bg-sky-700 text-white shadow-sm flex items-center gap-1.5"
-                >
-                  <Truck className="w-4 h-4" />
-                  Xác Nhận Xuất Chuyển Kho
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* DETAIL TRANSFER MODAL */}
       {selectedTransferDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
@@ -2410,8 +2506,8 @@ export const InventoryView: React.FC = () => {
             <div className="flex items-center justify-between pt-2">
               {selectedTransferDetail.status === 'in_transit' ? (
                 <button
-                  onClick={() => {
-                    updateTransferStatus(selectedTransferDetail.id, 'completed');
+                  onClick={async () => {
+                    await updateTransferStatus(selectedTransferDetail.id, 'completed');
                     setSelectedTransferDetail(null);
                   }}
                   className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5"

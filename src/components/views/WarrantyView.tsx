@@ -448,6 +448,52 @@ export const WarrantyView: React.FC = () => {
         </div>
       </div>
 
+      {/* SERIAL / IMEI WARRANTY LOOKUP BANNER */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white shadow-md flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-indigo-200">
+            <Cpu className="h-6 w-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm">Cổng Tra Cứu Bảo Hành Điện Tử NEXUS Care</h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                Chính Hãng 100%
+              </span>
+            </div>
+            <p className="text-xs text-indigo-200/80 mt-0.5">
+              Tra cứu thời hạn kích hoạt, lịch sử sửa chữa và linh kiện theo Số Serial / IMEI hoặc Số Điện Thoại
+            </p>
+          </div>
+        </div>
+
+        <div className="w-full md:w-auto flex items-center gap-2">
+          <div className="relative flex-1 md:w-72">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Nhập Serial, IMEI, SĐT..."
+              className="w-full rounded-xl bg-white/10 border border-white/20 pl-9 pr-3 py-2 text-xs text-white placeholder-indigo-200/50 focus:outline-none focus:ring-2 focus:ring-white/40 font-mono"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (!searchQuery.trim()) {
+                showToast('💡 Vui lòng nhập mã Serial hoặc Số điện thoại để tra cứu');
+              } else {
+                showToast(`🔍 Đang đối soát dữ liệu bảo hành cho [${searchQuery}]`);
+              }
+            }}
+            className="px-4 py-2 rounded-xl bg-white text-indigo-900 font-bold text-xs hover:bg-indigo-50 shadow-md transition-all active:scale-95 shrink-0"
+          >
+            Tra Cứu
+          </button>
+        </div>
+      </div>
+
       {/* FILTER TOOLBAR */}
       <div className="flex flex-col md:flex-row gap-3 justify-between items-stretch md:items-center bg-white dark:bg-slate-900/80 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         {/* Search */}
@@ -1268,6 +1314,20 @@ export const WarrantyView: React.FC = () => {
                   </strong>
                 </div>
               )}
+
+              {/* Electronic Warranty QR Code */}
+              <div className="pt-2 pb-1 flex items-center justify-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <img
+                  src={`https://img.vietqr.io/image/MB-0901234567-compact2.png?amount=0&addInfo=${encodeURIComponent(printTicket.code)}`}
+                  alt="Warranty QR"
+                  className="w-16 h-16 object-contain border border-slate-200 rounded p-1 bg-white"
+                />
+                <div className="text-[10px] text-slate-600 leading-tight text-left">
+                  <div className="font-bold text-slate-800 uppercase">MÃ TRA CỨU BẢO HÀNH ĐIỆN TỬ</div>
+                  <div className="mt-0.5">Quét mã QR để theo dõi tiến độ sửa chữa trực tuyến</div>
+                  <div className="font-mono text-indigo-700 font-bold mt-0.5">{printTicket.code} • SN: {printTicket.serialNumber || 'IMEI'}</div>
+                </div>
+              </div>
 
               <div className="pt-4 border-t border-slate-200 grid grid-cols-2 text-center text-[11px]">
                 <div>
