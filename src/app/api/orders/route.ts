@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, requirePermission } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { errorResponse } = await requireAuth(request);
+    if (errorResponse) return errorResponse;
+
     const orders = await prisma.order.findMany({
-      include: { items: true },
+      include: {
+        items: true,
+        warehouse: { select: { id: true, code: true, name: true } },
+        branch: { select: { id: true, code: true, name: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ success: true, data: orders });
@@ -20,6 +28,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const { user, errorResponse } = await requireAuth(request);
+    if (errorResponse) return errorResponse;
+
     const body = await request.json();
     const {
       code,
@@ -41,6 +52,8 @@ export async function POST(request: Request) {
       vatRate,
       vatAmount,
       salesChannel,
+      warehouseId,
+      branchId,
     } = body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -50,6 +63,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // Resolve target warehouse (from request, user profile, or system default)
+    let effectiveWarehouseId = warehouseId || user?.warehouseId;
+    if (!effectiveWarehouseId) {
+      const defaultWh = await prisma.warehouse.findFirst({
+        where: { isDefault: true, isActive: true },
+      });
+      effectiveWarehouseId = defaultWh?.id || null;
+    }
+
+    const effectiveBranchId = branchId || user?.branchId || null;
     const orderCode = code || `DH-${Date.now().toString().slice(-8)}`;
 
     // Verify customer existence
@@ -76,7 +99,9 @@ export async function POST(request: Request) {
           debtAmount: Number(debtAmount) || 0,
           paymentMethod: paymentMethod || "cash",
           status: status || "completed",
-          cashierName: cashierName || "Thu Ngân",
+          cashierName: cashierName || user?.name || "Thu Ngân",
+          warehouseId: effectiveWarehouseId,
+          branchId: effectiveBranchId,
           notes: notes || null,
           hasPinOverride: Boolean(hasPinOverride),
           vatRate: vatRate ? Number(vatRate) : 0,
@@ -103,10 +128,12 @@ export async function POST(request: Request) {
         include: { items: true },
       });
 
-      // 2. Decrement Product Inventory Stock
+      // 2. Decrement Product & Warehouse Inventory and Record StockLedger
       for (const it of items) {
         if (it.productId) {
           const totalUnitsToDeduct = (Number(it.quantity) || 1) * (Number(it.conversionRate) || 1);
+
+          // Update product master stock total
           await tx.product.updateMany({
             where: { id: it.productId },
             data: {
@@ -115,6 +142,58 @@ export async function POST(request: Request) {
               },
             },
           });
+
+          // Update warehouse specific StockBalance & Ledger if warehouse is assigned
+          if (effectiveWarehouseId) {
+            const currentBal = await tx.stockBalance.findUnique({
+              where: {
+                productId_warehouseId: {
+                  productId: it.productId,
+                  warehouseId: effectiveWarehouseId,
+                },
+              },
+            });
+
+            const balanceBefore = currentBal ? currentBal.quantity : 0;
+            const balanceAfter = balanceBefore - totalUnitsToDeduct;
+
+            await tx.stockBalance.upsert({
+              where: {
+                productId_warehouseId: {
+                  productId: it.productId,
+                  warehouseId: effectiveWarehouseId,
+                },
+              },
+              update: {
+                quantity: { decrement: totalUnitsToDeduct },
+              },
+              create: {
+                productId: it.productId,
+                warehouseId: effectiveWarehouseId,
+                quantity: -totalUnitsToDeduct,
+              },
+            });
+
+            // Record into StockLedger (Thẻ kho)
+            await tx.stockLedger.create({
+              data: {
+                code: `TK-ORD-${newOrder.code}-${it.sku || it.productId.slice(-4)}-${Date.now().toString().slice(-4)}`,
+                productId: it.productId,
+                warehouseId: effectiveWarehouseId,
+                type: "SALE",
+                referenceType: "Order",
+                referenceId: newOrder.id,
+                referenceCode: newOrder.code,
+                quantityChange: -totalUnitsToDeduct,
+                balanceBefore,
+                balanceAfter,
+                costPrice: Number(it.costPricePerUnit) || 0,
+                notes: `Xuất bán đơn hàng ${newOrder.code} cho khách ${customerName || "Khách Lẻ"}`,
+                createdById: user?.userId,
+                createdByName: user?.name || cashierName || "Thu Ngân POS",
+              },
+            });
+          }
         }
       }
 
@@ -186,6 +265,9 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const { errorResponse } = await requirePermission(request, "manage_orders");
+    if (errorResponse) return errorResponse;
+
     const body = await request.json();
     const { id, status } = body;
 
@@ -210,6 +292,9 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const { errorResponse } = await requirePermission(request, "manage_orders");
+    if (errorResponse) return errorResponse;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) {

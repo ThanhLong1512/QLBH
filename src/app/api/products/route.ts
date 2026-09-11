@@ -1,17 +1,35 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, requirePermission } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
 // GET all active products
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { user, errorResponse } = await requireAuth(request);
+    if (errorResponse) return errorResponse;
+
     const products = await prisma.product.findMany({
       where: { isActive: true },
-      include: { units: true, batches: true },
+      include: {
+        units: true,
+        batches: true,
+        stockBalances: {
+          include: { warehouse: { select: { id: true, code: true, name: true, isDefault: true } } },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json({ success: true, data: products });
+
+    // Hide costPrice if user is not authorized
+    const canViewCosts = user?.role === "admin" || user?.permissions.includes("view_cost_price");
+    const sanitizedProducts = products.map((p) => ({
+      ...p,
+      costPrice: canViewCosts ? p.costPrice : 0,
+    }));
+
+    return NextResponse.json({ success: true, data: sanitizedProducts });
   } catch (error) {
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Error fetching products" },
@@ -23,6 +41,9 @@ export async function GET() {
 // POST create new product
 export async function POST(request: Request) {
   try {
+    const { errorResponse } = await requirePermission(request, "manage_products");
+    if (errorResponse) return errorResponse;
+
     const body = await request.json();
     const {
       sku,
@@ -79,6 +100,20 @@ export async function POST(request: Request) {
       include: { units: true },
     });
 
+    // Auto-create initial stock balance rows for all active warehouses
+    const warehouses = await prisma.warehouse.findMany({ where: { isActive: true } });
+    if (warehouses.length > 0) {
+      await prisma.stockBalance.createMany({
+        data: warehouses.map((w) => ({
+          productId: newProduct.id,
+          warehouseId: w.id,
+          quantity: w.isDefault ? (Number(stockBaseUnits) || 0) : 0,
+          minStockAlert: Number(minStockAlert) || 10,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
     return NextResponse.json({ success: true, data: newProduct });
   } catch (error) {
     console.error("Create product error:", error);
@@ -92,6 +127,9 @@ export async function POST(request: Request) {
 // PUT update product
 export async function PUT(request: Request) {
   try {
+    const { errorResponse } = await requirePermission(request, "manage_products");
+    if (errorResponse) return errorResponse;
+
     const body = await request.json();
     const { id, units, ...updateData } = body;
 
@@ -144,6 +182,9 @@ export async function PUT(request: Request) {
 // DELETE soft delete
 export async function DELETE(request: Request) {
   try {
+    const { errorResponse } = await requirePermission(request, "manage_products");
+    if (errorResponse) return errorResponse;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) {

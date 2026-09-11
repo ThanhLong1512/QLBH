@@ -49,11 +49,16 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView, onToggleMob
     logout,
     unreadChatCount,
     isChatOpen,
-    setIsChatOpen
+    setIsChatOpen,
+    warehouses,
+    activeWarehouse,
+    setActiveWarehouse,
+    showToast
   } = useERP();
 
   const [showAlertsDropdown, setShowAlertsDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showWarehouseDropdown, setShowWarehouseDropdown] = useState(false);
 
   const viewTitles: Record<string, { title: string; subtitle: string }> = {
     dashboard: { title: 'Dashboard KPI Điều Hành', subtitle: 'Tổng quan chỉ số kinh doanh, tài chính & cảnh báo vận hành' },
@@ -106,6 +111,65 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView, onToggleMob
 
       {/* Action Controls - Grouped Neatly */}
       <div className="flex items-center gap-2.5">
+        {/* GROUP 0: Active Warehouse Switcher */}
+        <div className="relative">
+          <button
+            onClick={() => setShowWarehouseDropdown(!showWarehouseDropdown)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/70 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 shadow-xs transition-all active:scale-95"
+            title="Kho hàng đang làm việc (Click để đổi kho)"
+          >
+            <Store className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span className="hidden sm:inline font-bold text-slate-900 dark:text-white max-w-[130px] truncate">
+              {activeWarehouse?.name || 'Chọn Kho'}
+            </span>
+            <ChevronDown className="h-3 w-3 text-slate-400 shrink-0" />
+          </button>
+
+          {showWarehouseDropdown && (
+            <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-64 rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl p-2.5 space-y-1 z-50 animate-in fade-in duration-150 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+              <div className="px-2 py-1.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Chọn Kho Làm Việc</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-mono">
+                  {warehouses.length} kho
+                </span>
+              </div>
+              <div className="max-h-56 overflow-y-auto space-y-1 pt-1">
+                {warehouses.map(w => {
+                  const isCurrent = activeWarehouse?.id === w.id;
+                  return (
+                    <button
+                      key={w.id}
+                      onClick={() => {
+                        setActiveWarehouse(w);
+                        setShowWarehouseDropdown(false);
+                        showToast(`🏭 Đã chuyển làm việc tại: ${w.name}`);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-xs transition-all ${
+                        isCurrent
+                          ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800/80'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="truncate pr-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            {w.code}
+                          </span>
+                          <span className="truncate font-semibold">{w.name}</span>
+                        </div>
+                        {w.isDefault && (
+                          <span className="text-[10px] text-amber-500 font-normal">★ Kho chính</span>
+                        )}
+                      </div>
+                      {isCurrent && <Check className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* GROUP 1: POS Quick Actions Group */}
         <div className="flex items-center rounded-xl bg-slate-100 dark:bg-slate-800/80 p-0.5 border border-slate-200 dark:border-slate-700/70 shadow-sm">
           <button

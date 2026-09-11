@@ -8,7 +8,10 @@ import {
   StockOutboundReceipt,
   StockOutboundItem,
   StocktakeReport,
-  StocktakeItem
+  StocktakeItem,
+  WarehouseTransfer,
+  WarehouseTransferItem,
+  StockAlertItem
 } from '../../types/erp';
 import { Pagination } from '../common/Pagination';
 import {
@@ -30,7 +33,15 @@ import {
   Package,
   Layers,
   Sparkles,
-  RotateCw
+  RotateCw,
+  Truck,
+  ArrowRightLeft,
+  Bell,
+  ShieldAlert,
+  ScanBarcode,
+  History,
+  Check,
+  Clock
 } from 'lucide-react';
 
 export const InventoryView: React.FC = () => {
@@ -40,16 +51,23 @@ export const InventoryView: React.FC = () => {
     inbounds,
     outbounds,
     stocktakes,
+    transfers,
     addInboundReceipt,
     addOutboundReceipt,
     addStocktakeReport,
+    reconcileStocktake,
+    addWarehouseTransfer,
+    updateTransferStatus,
+    lowStockAlerts,
+    reorderRecommendations,
     canViewCosts,
     canExportExcel,
     showToast,
-    currentUser
+    currentUser,
+    openScannerModal
   } = useERP();
 
-  const [activeTab, setActiveTab] = useState<'balance' | 'inbounds' | 'outbounds' | 'stocktake'>('balance');
+  const [activeTab, setActiveTab] = useState<'balance' | 'inbounds' | 'outbounds' | 'stocktake' | 'transfers'>('balance');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
@@ -66,8 +84,37 @@ export const InventoryView: React.FC = () => {
   // Modals
   const [isInboundModalOpen, setIsInboundModalOpen] = useState(false);
   const [isOutboundModalOpen, setIsOutboundModalOpen] = useState(false);
+  const [isStockAlertModalOpen, setIsStockAlertModalOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [selectedInboundDetail, setSelectedInboundDetail] = useState<StockInboundReceipt | null>(null);
   const [selectedOutboundDetail, setSelectedOutboundDetail] = useState<StockOutboundReceipt | null>(null);
+  const [selectedTransferDetail, setSelectedTransferDetail] = useState<WarehouseTransfer | null>(null);
+  const [selectedStocktakeReport, setSelectedStocktakeReport] = useState<StocktakeReport | null>(null);
+
+  // Transfer Form & Pagination State
+  const [transferSource, setTransferSource] = useState('Kho Tổng');
+  const [transferTarget, setTransferTarget] = useState('Chi nhánh Bình Tân');
+  const [transferNotes, setTransferNotes] = useState('');
+  const [transferItems, setTransferItems] = useState<
+    Array<{
+      productId: string;
+      productName: string;
+      unitName: string;
+      conversionRate: number;
+      quantity: number;
+      unitCost: number;
+      batchNumber?: string;
+    }>
+  >([]);
+  const [transferStatusFilter, setTransferStatusFilter] = useState<'all' | 'in_transit' | 'completed' | 'pending'>('all');
+  const [transferPage, setTransferPage] = useState(1);
+  const [transferPageSize, setTransferPageSize] = useState(8);
+
+  // Stocktake View Mode & State
+  const [stocktakeViewMode, setStocktakeViewMode] = useState<'active' | 'history'>('active');
+  const [stocktakeWarehouse, setStocktakeWarehouse] = useState('Kho Tổng');
+  const [stocktakeCategoryFilter, setStocktakeCategoryFilter] = useState('all');
+  const [stocktakeNotes, setStocktakeNotes] = useState('');
 
   // Inbound Form State
   const [inboundSupplierId, setInboundSupplierId] = useState('');
@@ -369,6 +416,153 @@ export const InventoryView: React.FC = () => {
     setIsOutboundModalOpen(false);
   };
 
+  // Filtered transfers
+  const filteredTransfers = useMemo(() => {
+    return (transfers || []).filter(t => {
+      const matchSearch =
+        t.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.sourceWarehouse.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.targetWarehouse.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (t.receiverName && t.receiverName.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchStatus = transferStatusFilter === 'all' || t.status === transferStatusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [transfers, searchQuery, transferStatusFilter]);
+
+  const paginatedTransfers = useMemo(() => {
+    const start = (transferPage - 1) * transferPageSize;
+    return filteredTransfers.slice(start, start + transferPageSize);
+  }, [filteredTransfers, transferPage, transferPageSize]);
+
+  // Transfer Handlers
+  const handleOpenTransferModal = () => {
+    const p = products[0];
+    if (p) {
+      setTransferItems([
+        {
+          productId: p.id,
+          productName: p.name,
+          unitName: p.baseUnit,
+          conversionRate: 1,
+          quantity: 1,
+          unitCost: p.costPrice
+        }
+      ]);
+    } else {
+      setTransferItems([]);
+    }
+    setTransferSource('Kho Tổng');
+    setTransferTarget('Chi nhánh Bình Tân');
+    setTransferNotes('');
+    setIsTransferModalOpen(true);
+  };
+
+  const handleAddTransferItemRow = () => {
+    const p = products[0];
+    if (!p) return;
+    setTransferItems(prev => [
+      ...prev,
+      {
+        productId: p.id,
+        productName: p.name,
+        unitName: p.baseUnit,
+        conversionRate: 1,
+        quantity: 1,
+        unitCost: p.costPrice
+      }
+    ]);
+  };
+
+  const handleSaveTransfer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (transferItems.length === 0) {
+      showToast('⚠️ Phiếu chuyển kho phải có ít nhất 1 mặt hàng');
+      return;
+    }
+    if (transferSource === transferTarget) {
+      showToast('⚠️ Kho xuất và Kho nhận không được trùng nhau');
+      return;
+    }
+
+    for (const it of transferItems) {
+      const prod = products.find(p => p.id === it.productId);
+      if (prod && prod.stockBaseUnits < it.quantity) {
+        showToast(`⚠️ Sản phẩm "${prod.name}" không đủ tồn tại ${transferSource} (Hiện có: ${prod.stockBaseUnits} ${prod.baseUnit})`);
+        return;
+      }
+    }
+
+    let totalVal = 0;
+    let totalQty = 0;
+    const itemsPayload: WarehouseTransferItem[] = transferItems.map(it => {
+      const prod = products.find(p => p.id === it.productId)!;
+      const cost = it.quantity * prod.costPrice;
+      totalVal += cost;
+      totalQty += it.quantity;
+      return {
+        productId: it.productId,
+        productName: prod.name,
+        sku: prod.sku,
+        unitName: it.unitName,
+        conversionRate: it.conversionRate,
+        quantity: it.quantity,
+        unitCost: prod.costPrice,
+        totalCost: cost,
+        batchNumber: it.batchNumber
+      };
+    });
+
+    addWarehouseTransfer({
+      date: new Date().toISOString().slice(0, 10),
+      sourceWarehouse: transferSource,
+      targetWarehouse: transferTarget,
+      creatorName: currentUser ? currentUser.name : 'Thủ Kho',
+      status: 'in_transit',
+      items: itemsPayload,
+      totalQuantity: totalQty,
+      totalCost: totalVal,
+      notes: transferNotes
+    });
+
+    setIsTransferModalOpen(false);
+  };
+
+  // Convert LowStockAlerts into Inbound items
+  const handleTransferAlertsToInbound = () => {
+    if (lowStockAlerts.length === 0) {
+      showToast('ℹ️ Hiện không có mặt hàng nào chạm ngưỡng cảnh báo tồn');
+      return;
+    }
+    if (suppliers.length === 0) {
+      showToast('⚠️ Vui lòng tạo ít nhất một nhà cung cấp trước');
+      return;
+    }
+
+    setInboundSupplierId(suppliers[0].id);
+    const convertedItems = lowStockAlerts.map(alert => {
+      return {
+        productId: alert.productId,
+        productName: alert.productName,
+        unitName: alert.baseUnit,
+        conversionRate: 1,
+        quantity: alert.suggestedReorderQuantity,
+        unitCost: alert.costPrice,
+        batchNumber: `LÔ-${new Date().toISOString().slice(2, 7).replace('-', '')}`,
+        expiryDate: new Date(Date.now() + 180 * 86400000).toISOString().slice(0, 10)
+      };
+    });
+
+    setInboundItems(convertedItems);
+    const totalCost = convertedItems.reduce((sum, it) => sum + it.quantity * it.unitCost, 0);
+    setInboundPaidAmount(totalCost);
+    setInboundPaymentMethod('bank_transfer');
+    setInboundNotes('Nhập hàng bổ sung tự động theo đề xuất cảnh báo tồn kho tối thiểu');
+
+    setIsStockAlertModalOpen(false);
+    setIsInboundModalOpen(true);
+    showToast(`⚡ Đã tự động thêm ${convertedItems.length} mặt hàng thiếu vào Phiếu Nhập Kho!`);
+  };
+
   // Stocktake Actions
   const handleActualCountChange = (productId: string, val: number) => {
     setStocktakeCounts(prev => ({
@@ -378,7 +572,12 @@ export const InventoryView: React.FC = () => {
   };
 
   const handleReconcileStocktake = () => {
-    const items: StocktakeItem[] = products.map(prod => {
+    const targetProducts =
+      stocktakeCategoryFilter === 'all'
+        ? products
+        : products.filter(p => p.category === stocktakeCategoryFilter);
+
+    const items: StocktakeItem[] = targetProducts.map(prod => {
       const systemStock = prod.stockBaseUnits;
       const actualStock =
         stocktakeCounts[prod.id] !== undefined ? stocktakeCounts[prod.id] : systemStock;
@@ -394,22 +593,55 @@ export const InventoryView: React.FC = () => {
         actualStock,
         difference: diff,
         unitCost: prod.costPrice,
-        differenceValue: diffValue
+        differenceValue: diffValue,
+        note: diff !== 0 ? (diff > 0 ? 'Thừa kiểm đếm' : 'Hao hụt/Mất mát') : 'Khớp sổ sách'
       };
     });
 
     const totalDiffVal = items.reduce((sum, item) => sum + Math.abs(item.differenceValue), 0);
 
     addStocktakeReport({
-      date: new Date().toISOString().slice(0, 10),
+      date: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      warehouseLocation: stocktakeWarehouse,
       creatorName: currentUser ? currentUser.name : 'Ban Kiểm Kê',
       items,
       totalDiscrepancyAmount: totalDiffVal,
-      notes: 'Đã hoàn tất đối soát và tự động cân bằng tồn kho thực tế',
-      status: 'balanced'
+      notes: stocktakeNotes || `Kiểm kê định kỳ tại ${stocktakeWarehouse}. Đã hoàn tất đối soát và tự động cân bằng tồn kho.`,
+      status: 'balanced',
+      balancedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      balancedBy: currentUser ? currentUser.name : 'Quản Lý Kho'
     });
+
     setStocktakeCounts({});
-    showToast('✅ Đã cân bằng số liệu tồn kho thành công!');
+    setStocktakeNotes('');
+    showToast('✅ Đã cân bằng số liệu tồn kho thành công và lưu biên bản CSDL!');
+  };
+
+  const exportStocktakeExcel = (report: StocktakeReport) => {
+    const csvContent = [
+      ['Mã SKU', 'Tên Sản Phẩm', 'ĐVT', 'Tồn Sổ Sách', 'Thực Đếm', 'Chênh Lệch', 'Đơn Giá Vốn', 'Giá Trị Lệch', 'Ghi Chú'].join(','),
+      ...report.items.map(it =>
+        [
+          `"${it.sku}"`,
+          `"${it.productName}"`,
+          `"${it.unitName}"`,
+          it.systemStock,
+          it.actualStock,
+          it.difference,
+          it.unitCost,
+          it.differenceValue,
+          `"${it.note || ''}"`
+        ].join(',')
+      )
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Bien_Ban_Kiem_Ke_${report.code}.csv`;
+    a.click();
+    showToast(`📥 Đã xuất biên bản kiểm kê ${report.code}!`);
   };
 
   const exportStockBalanceExcel = () => {
@@ -453,6 +685,33 @@ export const InventoryView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            id="stock-alert-hub-btn"
+            onClick={() => setIsStockAlertModalOpen(true)}
+            className={`px-3 py-2 text-xs font-semibold rounded-lg border shadow-sm flex items-center gap-1.5 transition-all ${
+              lowStockAlerts.length > 0
+                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-100'
+                : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Bell className={`w-4 h-4 ${lowStockAlerts.length > 0 ? 'animate-bounce text-amber-500' : 'text-slate-400'}`} />
+            Cảnh Báo Tồn
+            {lowStockAlerts.length > 0 && (
+              <span className="px-1.5 py-0.2 text-[10px] font-bold rounded-full bg-amber-500 text-white">
+                {lowStockAlerts.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            id="create-transfer-btn"
+            onClick={handleOpenTransferModal}
+            className="px-3 py-2 text-xs font-semibold rounded-lg bg-sky-600 hover:bg-sky-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
+          >
+            <ArrowRightLeft className="w-4 h-4" />
+            Lập Phiếu Chuyển Kho
+          </button>
+
           {canExportExcel && (
             <button
               onClick={exportStockBalanceExcel}
@@ -587,6 +846,24 @@ export const InventoryView: React.FC = () => {
 
         <button
           onClick={() => {
+            setActiveTab('transfers');
+            setSearchQuery('');
+          }}
+          className={`pb-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+            activeTab === 'transfers'
+              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <ArrowRightLeft className="w-4 h-4 text-sky-500" />
+          Chuyển Kho Nội Bộ
+          <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 font-semibold">
+            {transfers.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => {
             setActiveTab('stocktake');
             setSearchQuery('');
           }}
@@ -598,6 +875,9 @@ export const InventoryView: React.FC = () => {
         >
           <ClipboardCheck className="w-4 h-4 text-indigo-500" />
           Kiểm Kê & Cân Bằng Kho
+          <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-semibold">
+            {stocktakes.length}
+          </span>
         </button>
       </div>
 
@@ -916,24 +1196,340 @@ export const InventoryView: React.FC = () => {
       {/* TAB 4: STOCKTAKE & AUDIT */}
       {activeTab === 'stocktake' && (
         <div className="space-y-4">
-          <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
-                <ClipboardCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                Bảng Kiểm Kê & Đối Soát Khớp Tồn Kho Thực Tế
-              </h3>
-              <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-0.5">
-                Nhập số lượng đếm được thực tế tại kho. Hệ thống tự động tính chênh lệch Thừa / Thiếu và giá trị lệch. Nhấn nút "Cân Bằng Kho" để khớp dữ liệu.
-              </p>
+          {/* Subheader & Mode toggle */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setStocktakeViewMode('active')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
+                  stocktakeViewMode === 'active'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
+                }`}
+              >
+                Kiểm Kê & Cân Bằng Kho Hiện Tại
+              </button>
+              <button
+                onClick={() => setStocktakeViewMode('history')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${
+                  stocktakeViewMode === 'history'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                Lịch Sử Biên Bản ({stocktakes.length})
+              </button>
             </div>
 
-            <button
-              onClick={handleReconcileStocktake}
-              className="px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow flex items-center gap-2 shrink-0 transition-colors"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              Cân Bằng & Khớp Tồn Kho
-            </button>
+            {stocktakeViewMode === 'active' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    openScannerModal((code) => {
+                      const found = products.find(p => p.sku === code || p.barcode === code);
+                      if (found) {
+                        const current = stocktakeCounts[found.id] !== undefined ? stocktakeCounts[found.id] : found.stockBaseUnits;
+                        handleActualCountChange(found.id, current + 1);
+                        showToast(`🔍 Quét thành công: ${found.name} (+1)`);
+                      } else {
+                        showToast(`⚠️ Không tìm thấy sản phẩm có mã: ${code}`);
+                      }
+                    });
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center gap-1"
+                >
+                  <ScanBarcode className="w-3.5 h-3.5 text-indigo-500" />
+                  Quét Mã Vạch Kiểm Kê
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStocktakeCounts({});
+                    showToast('Đã đặt lại số lượng đếm khớp 100% với tồn sổ sách');
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center gap-1"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  Khớp Theo Sổ Sách
+                </button>
+              </div>
+            )}
+          </div>
+
+          {stocktakeViewMode === 'active' ? (
+            <>
+              {/* Warehouse selector & Filters */}
+              <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
+                    <ClipboardCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    Bảng Đối Soát Tồn Kho Thực Tế vs Sổ Sách Hệ Thống
+                  </h3>
+                  <p className="text-xs text-indigo-700 dark:text-indigo-300">
+                    Nhập số lượng kiểm đếm thực tế tại kho. Hệ thống tự động tính chênh lệch Thừa / Thiếu và giá trị lệch. Nhấn nút "Cân Bằng Kho" để cập nhật số tồn mới nhất.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <select
+                    value={stocktakeWarehouse}
+                    onChange={e => setStocktakeWarehouse(e.target.value)}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="Kho Tổng">Kho Tổng</option>
+                    <option value="Chi nhánh Bình Tân">Chi nhánh Bình Tân</option>
+                    <option value="Chi nhánh Quận 1">Chi nhánh Quận 1</option>
+                    <option value="Kho Thủ Đức">Kho Thủ Đức</option>
+                  </select>
+
+                  <select
+                    value={stocktakeCategoryFilter}
+                    onChange={e => setStocktakeCategoryFilter(e.target.value)}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="all">Tất cả ngành hàng</option>
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    onClick={handleReconcileStocktake}
+                    className="px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-md flex items-center gap-2 transition-colors"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Phê Duyệt & Cân Bằng Kho
+                  </button>
+                </div>
+              </div>
+
+              {/* Stocktake Table */}
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold">
+                        <th className="py-3 px-4">Sản Phẩm & SKU</th>
+                        <th className="py-3 px-4">ĐVT</th>
+                        <th className="py-3 px-4 text-center">Tồn Hệ Thống (1)</th>
+                        <th className="py-3 px-4 text-center w-52">Thực Tế Đếm Được (2)</th>
+                        <th className="py-3 px-4 text-center">Chênh Lệch (2 - 1)</th>
+                        {canViewCosts && <th className="py-3 px-4 text-right">Giá Trị Chênh Lệch</th>}
+                        <th className="py-3 px-4 text-center">Trạng Thái</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                      {(stocktakeCategoryFilter === 'all'
+                        ? products
+                        : products.filter(p => p.category === stocktakeCategoryFilter)
+                      ).map(p => {
+                        const actual =
+                          stocktakeCounts[p.id] !== undefined ? stocktakeCounts[p.id] : p.stockBaseUnits;
+                        const diff = actual - p.stockBaseUnits;
+                        const diffVal = diff * p.costPrice;
+
+                        return (
+                          <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                            <td className="py-3 px-4">
+                              <span className="font-semibold text-slate-900 dark:text-white block">{p.name}</span>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400">{p.sku}</span>
+                                {p.barcode && <span className="text-[10px] text-slate-400 font-mono">({p.barcode})</span>}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-medium">{p.baseUnit}</td>
+                            <td className="py-3 px-4 text-center font-bold text-slate-800 dark:text-slate-200">
+                              {p.stockBaseUnits}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleActualCountChange(p.id, Math.max(0, actual - 1))}
+                                  className="w-6 h-6 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 font-bold text-sm"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={actual}
+                                  onChange={e => handleActualCountChange(p.id, Number(e.target.value))}
+                                  className="w-20 px-2 py-1 text-center font-bold text-xs rounded border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleActualCountChange(p.id, actual + 1)}
+                                  className="w-6 h-6 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 font-bold text-sm"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span
+                                className={`font-bold px-2 py-0.5 rounded-full text-xs ${
+                                  diff === 0
+                                    ? 'text-slate-400 bg-slate-100 dark:bg-slate-800'
+                                    : diff > 0
+                                    ? 'text-emerald-600 bg-emerald-500/10'
+                                    : 'text-rose-600 bg-rose-500/10'
+                                }`}
+                              >
+                                {diff > 0 ? `+${diff}` : diff}
+                              </span>
+                            </td>
+                            {canViewCosts && (
+                              <td className="py-3 px-4 text-right font-mono font-semibold">
+                                <span className={diff > 0 ? 'text-emerald-600' : diff < 0 ? 'text-rose-600' : 'text-slate-400'}>
+                                  {diffVal > 0 ? `+${diffVal.toLocaleString('vi-VN')} đ` : `${diffVal.toLocaleString('vi-VN')} đ`}
+                                </span>
+                              </td>
+                            )}
+                            <td className="py-3 px-4 text-center">
+                              {diff === 0 ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-600 text-[11px] font-medium">
+                                  <Check className="w-3.5 h-3.5" /> Khớp tồn
+                                </span>
+                              ) : diff > 0 ? (
+                                <span className="text-emerald-600 text-[11px] font-medium">Thừa kiểm đếm</span>
+                              ) : (
+                                <span className="text-rose-600 text-[11px] font-medium">Hao hụt/Mất mát</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* Stocktake History Mode */
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold">
+                      <th className="py-3 px-4">Mã Biên Bản</th>
+                      <th className="py-3 px-4">Thời Gian</th>
+                      <th className="py-3 px-4">Kho Thực Hiện</th>
+                      <th className="py-3 px-4">Người Lập / Người Duyệt</th>
+                      <th className="py-3 px-4 text-center">Số Mặt Hàng</th>
+                      <th className="py-3 px-4 text-right">Tổng Lệch Giá Trị</th>
+                      <th className="py-3 px-4 text-center">Trạng Thái</th>
+                      <th className="py-3 px-4 text-center">Thao Tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                    {stocktakes.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-slate-400">
+                          Chưa có biên bản kiểm kê nào trong lịch sử
+                        </td>
+                      </tr>
+                    ) : (
+                      stocktakes.map(report => (
+                        <tr key={report.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                          <td className="py-3 px-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            {report.code}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                            {report.date}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
+                            {report.warehouseLocation || 'Kho Tổng'}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="block font-medium text-slate-800 dark:text-slate-200">{report.creatorName}</span>
+                            {report.balancedBy && (
+                              <span className="text-[10px] text-emerald-600 block">Duyệt: {report.balancedBy}</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center font-medium">
+                            {report.items.length} SP
+                          </td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
+                            {report.totalDiscrepancyAmount.toLocaleString('vi-VN')} đ
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                              Đã cân bằng
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => setSelectedStocktakeReport(report)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                title="Xem chi tiết"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => exportStocktakeExcel(report)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                title="Xuất CSV"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 5: WAREHOUSE TRANSFERS */}
+      {activeTab === 'transfers' && (
+        <div className="space-y-4">
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
+            <div className="relative w-full md:w-96">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Tìm phiếu chuyển theo mã, kho xuất, kho nhập..."
+                value={searchQuery}
+                onChange={e => {
+                  setSearchQuery(e.target.value);
+                  setTransferPage(1);
+                }}
+                className="w-full pl-9 pr-8 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <select
+                value={transferStatusFilter}
+                onChange={e => {
+                  setTransferStatusFilter(e.target.value as any);
+                  setTransferPage(1);
+                }}
+                className="px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium"
+              >
+                <option value="all">Tất cả trạng thái</option>
+                <option value="in_transit">Đang vận chuyển</option>
+                <option value="completed">Đã nhận hàng</option>
+                <option value="pending">Chờ xuất kho</option>
+              </select>
+
+              <button
+                onClick={handleOpenTransferModal}
+                className="px-3 py-2 text-xs font-semibold rounded-lg bg-sky-600 hover:bg-sky-700 text-white shadow-sm flex items-center gap-1.5 shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                Lập Phiếu Chuyển Mới
+              </button>
+            </div>
           </div>
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm overflow-hidden">
@@ -941,66 +1537,104 @@ export const InventoryView: React.FC = () => {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold">
-                    <th className="py-3 px-4">Sản Phẩm & SKU</th>
-                    <th className="py-3 px-4">ĐVT</th>
-                    <th className="py-3 px-4 text-center">Tồn Hệ Thống (1)</th>
-                    <th className="py-3 px-4 text-center w-40">Thực Tế Đếm Được (2)</th>
-                    <th className="py-3 px-4 text-center">Chênh Lệch (2 - 1)</th>
-                    {canViewCosts && <th className="py-3 px-4 text-right">Giá Trị Chênh Lệch</th>}
+                    <th className="py-3 px-4">Mã Phiếu Chuyển</th>
+                    <th className="py-3 px-4">Ngày Chuyển</th>
+                    <th className="py-3 px-4">Tuyến Chuyển Kho</th>
+                    <th className="py-3 px-4">Người Lập</th>
+                    <th className="py-3 px-4 text-center">Số Lượng</th>
+                    <th className="py-3 px-4 text-right">Tổng Giá Trị</th>
+                    <th className="py-3 px-4 text-center">Trạng Thái</th>
+                    <th className="py-3 px-4 text-center">Thao Tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                  {products.map(p => {
-                    const actual =
-                      stocktakeCounts[p.id] !== undefined ? stocktakeCounts[p.id] : p.stockBaseUnits;
-                    const diff = actual - p.stockBaseUnits;
-                    const diffVal = diff * p.costPrice;
-
-                    return (
-                      <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                  {paginatedTransfers.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-slate-400">
+                        Chưa có phiếu chuyển kho nội bộ nào phù hợp bộ lọc
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedTransfers.map(t => (
+                      <tr key={t.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                        <td className="py-3 px-4 font-mono font-bold text-sky-600 dark:text-sky-400">
+                          {t.code}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                          {t.date}
+                        </td>
                         <td className="py-3 px-4">
-                          <span className="font-semibold text-slate-900 dark:text-white block">{p.name}</span>
-                          <span className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400">{p.sku}</span>
+                          <div className="flex items-center gap-1.5 font-medium text-slate-900 dark:text-white">
+                            <span>{t.sourceWarehouse}</span>
+                            <ArrowRightLeft className="w-3.5 h-3.5 text-slate-400" />
+                            <span className="text-sky-600 dark:text-sky-400 font-semibold">{t.targetWarehouse}</span>
+                          </div>
                         </td>
-                        <td className="py-3 px-4 font-medium">{p.baseUnit}</td>
-                        <td className="py-3 px-4 text-center font-bold text-slate-800 dark:text-slate-200">
-                          {p.stockBaseUnits}
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                          {t.creatorName}
+                        </td>
+                        <td className="py-3 px-4 text-center font-medium">
+                          {t.items.length} mặt hàng ({t.totalQuantity} SP)
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-white">
+                          {canViewCosts ? `${t.totalCost.toLocaleString('vi-VN')} đ` : '•••••••• đ'}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <input
-                            type="number"
-                            min={0}
-                            value={actual}
-                            onChange={e => handleActualCountChange(p.id, Number(e.target.value))}
-                            className="w-24 px-2.5 py-1 text-center font-bold text-xs rounded border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span
-                            className={`font-bold px-2 py-0.5 rounded-full text-xs ${
-                              diff === 0
-                                ? 'text-slate-400 bg-slate-100 dark:bg-slate-800'
-                                : diff > 0
-                                ? 'text-emerald-600 bg-emerald-500/10'
-                                : 'text-rose-600 bg-rose-500/10'
-                            }`}
-                          >
-                            {diff > 0 ? `+${diff}` : diff}
-                          </span>
-                        </td>
-                        {canViewCosts && (
-                          <td className="py-3 px-4 text-right font-mono font-semibold">
-                            <span className={diff > 0 ? 'text-emerald-600' : diff < 0 ? 'text-rose-600' : 'text-slate-400'}>
-                              {diffVal > 0 ? `+${diffVal.toLocaleString('vi-VN')} đ` : `${diffVal.toLocaleString('vi-VN')} đ`}
+                          {t.status === 'completed' && (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Đã nhận hàng
                             </span>
-                          </td>
-                        )}
+                          )}
+                          {t.status === 'in_transit' && (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 inline-flex items-center gap-1 animate-pulse">
+                              <Truck className="w-3 h-3" /> Đang vận chuyển
+                            </span>
+                          )}
+                          {t.status === 'pending' && (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 inline-flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> Chờ xuất kho
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {t.status === 'in_transit' && (
+                              <button
+                                onClick={() => {
+                                  updateTransferStatus(t.id, 'completed');
+                                }}
+                                className="px-2 py-1 text-[11px] font-bold rounded bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1"
+                                title="Xác nhận hàng đã về tới kho đích"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                Nhận Hàng
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setSelectedTransferDetail(t)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              title="Xem chi tiết phiếu chuyển"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
-                    );
-                  })}
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              currentPage={transferPage}
+              totalItems={filteredTransfers.length}
+              pageSize={transferPageSize}
+              onPageChange={setTransferPage}
+              onPageSizeChange={setTransferPageSize}
+              itemName="phiếu chuyển kho"
+              className="border-t border-slate-200 dark:border-slate-800"
+            />
           </div>
         </div>
       )}
@@ -1511,6 +2145,519 @@ export const InventoryView: React.FC = () => {
               >
                 Đóng
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE TRANSFER MODAL */}
+      {isTransferModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 px-6 py-4 backdrop-blur">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-sky-600" />
+                Lập Phiếu Chuyển Kho Nội Bộ Đa Chi Nhánh
+              </h3>
+              <button
+                onClick={() => setIsTransferModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTransfer} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Kho Xuất Hàng (Nguồn) *
+                  </label>
+                  <select
+                    value={transferSource}
+                    onChange={e => setTransferSource(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
+                  >
+                    <option value="Kho Tổng">Kho Tổng (Trụ sở)</option>
+                    <option value="Chi nhánh Bình Tân">Chi nhánh Bình Tân</option>
+                    <option value="Chi nhánh Quận 1">Chi nhánh Quận 1</option>
+                    <option value="Kho Thủ Đức">Kho Thủ Đức</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Kho Nhận Hàng (Đích) *
+                  </label>
+                  <select
+                    value={transferTarget}
+                    onChange={e => setTransferTarget(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
+                  >
+                    <option value="Chi nhánh Bình Tân">Chi nhánh Bình Tân</option>
+                    <option value="Kho Tổng">Kho Tổng (Trụ sở)</option>
+                    <option value="Chi nhánh Quận 1">Chi nhánh Quận 1</option>
+                    <option value="Kho Thủ Đức">Kho Thủ Đức</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
+                    Danh Sách Mặt Hàng Điều Chuyển ({transferItems.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddTransferItemRow}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-sky-300 dark:border-sky-800 text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-950/40 flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Thêm Hàng
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {transferItems.map((it, index) => {
+                    const currentProd = products.find(p => p.id === it.productId);
+                    const maxStock = currentProd ? currentProd.stockBaseUnits : 0;
+
+                    return (
+                      <div
+                        key={index}
+                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 grid grid-cols-12 gap-3 items-center text-xs"
+                      >
+                        <div className="col-span-12 sm:col-span-6">
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Sản phẩm</label>
+                          <select
+                            value={it.productId}
+                            onChange={e => {
+                              const found = products.find(p => p.id === e.target.value);
+                              if (found) {
+                                const newItems = [...transferItems];
+                                newItems[index] = {
+                                  productId: found.id,
+                                  productName: found.name,
+                                  unitName: found.baseUnit,
+                                  conversionRate: 1,
+                                  quantity: 1,
+                                  unitCost: found.costPrice
+                                };
+                                setTransferItems(newItems);
+                              }
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
+                          >
+                            {products.map(p => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.sku}) - Tồn kho: {p.stockBaseUnits} {p.baseUnit}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="col-span-6 sm:col-span-3">
+                          <label className="text-[10px] text-slate-400 block mb-0.5">
+                            Số lượng chuyển (Max: {maxStock})
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={maxStock}
+                            value={it.quantity}
+                            onChange={e => {
+                              const val = Math.max(1, Number(e.target.value));
+                              const newItems = [...transferItems];
+                              newItems[index].quantity = val;
+                              setTransferItems(newItems);
+                            }}
+                            className="w-full px-2.5 py-1.5 text-center font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                          />
+                        </div>
+
+                        <div className="col-span-5 sm:col-span-2 text-right">
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Giá trị chuyển</label>
+                          <span className="font-bold text-slate-900 dark:text-white block truncate">
+                            {canViewCosts ? `${(it.quantity * it.unitCost).toLocaleString('vi-VN')} đ` : '•••• đ'}
+                          </span>
+                        </div>
+
+                        <div className="col-span-1 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (transferItems.length > 1) {
+                                setTransferItems(transferItems.filter((_, i) => i !== index));
+                              } else {
+                                showToast('⚠️ Phiếu chuyển phải có ít nhất 1 mặt hàng');
+                              }
+                            }}
+                            className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Ghi chú điều chuyển / Phương tiện vận chuyển
+                </label>
+                <textarea
+                  rows={2}
+                  value={transferNotes}
+                  onChange={e => setTransferNotes(e.target.value)}
+                  placeholder="Ví dụ: Chuyển hàng hỗ trợ chi nhánh khai trương, giao bằng xe tải nội bộ..."
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsTransferModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-semibold rounded-lg bg-sky-600 hover:bg-sky-700 text-white shadow-sm flex items-center gap-1.5"
+                >
+                  <Truck className="w-4 h-4" />
+                  Xác Nhận Xuất Chuyển Kho
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DETAIL TRANSFER MODAL */}
+      {selectedTransferDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <ArrowRightLeft className="w-5 h-5 text-sky-600" />
+                  Phiếu Chuyển Kho: {selectedTransferDetail.code}
+                </h3>
+                <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedTransferDetail.sourceWarehouse}</span>
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  <span className="font-semibold text-sky-600 dark:text-sky-400">{selectedTransferDetail.targetWarehouse}</span>
+                  <span>• {selectedTransferDetail.date}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedTransferDetail(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {selectedTransferDetail.items.map((it, i) => (
+                <div key={i} className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-semibold text-slate-900 dark:text-white block">{it.productName}</span>
+                    <span className="text-slate-500 text-[11px]">
+                      Mã: {it.sku} • SL: {it.quantity} {it.unitName}
+                    </span>
+                  </div>
+                  {canViewCosts && (
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {it.totalCost.toLocaleString('vi-VN')} đ
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-1.5 text-xs">
+              <div className="flex justify-between font-bold text-slate-900 dark:text-white">
+                <span>Tổng giá trị hàng chuyển:</span>
+                <span>{canViewCosts ? `${selectedTransferDetail.totalCost.toLocaleString('vi-VN')} đ` : '•••••••• đ'}</span>
+              </div>
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                <span>Người lập phiếu:</span>
+                <span>{selectedTransferDetail.creatorName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600 dark:text-slate-400">Trạng thái hiện tại:</span>
+                {selectedTransferDetail.status === 'completed' ? (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                    Đã nhận tại kho đích
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300">
+                    Đang trên đường vận chuyển
+                  </span>
+                )}
+              </div>
+              {selectedTransferDetail.notes && (
+                <p className="text-slate-500 text-[11px] pt-1">Ghi chú: {selectedTransferDetail.notes}</p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              {selectedTransferDetail.status === 'in_transit' ? (
+                <button
+                  onClick={() => {
+                    updateTransferStatus(selectedTransferDetail.id, 'completed');
+                    setSelectedTransferDetail(null);
+                  }}
+                  className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Xác Nhận Đã Nhập Kho Đích
+                </button>
+              ) : (
+                <span />
+              )}
+              <button
+                onClick={() => setSelectedTransferDetail(null)}
+                className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DETAIL STOCKTAKE REPORT MODAL */}
+      {selectedStocktakeReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <ClipboardCheck className="w-5 h-5 text-indigo-600" />
+                  Biên Bản Kiểm Kê: {selectedStocktakeReport.code}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Địa điểm: {selectedStocktakeReport.warehouseLocation || 'Kho Tổng'} • Thời gian: {selectedStocktakeReport.date}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedStocktakeReport(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 font-semibold">
+                    <th className="py-2">Mặt hàng</th>
+                    <th className="py-2 text-center">Tồn sổ sách</th>
+                    <th className="py-2 text-center">Thực đếm</th>
+                    <th className="py-2 text-center">Chênh lệch</th>
+                    {canViewCosts && <th className="py-2 text-right">Giá trị lệch</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {selectedStocktakeReport.items.map((it, idx) => (
+                    <tr key={idx}>
+                      <td className="py-2">
+                        <span className="font-semibold block">{it.productName}</span>
+                        <span className="font-mono text-[11px] text-slate-400">{it.sku}</span>
+                      </td>
+                      <td className="py-2 text-center">{it.systemStock}</td>
+                      <td className="py-2 text-center font-bold">{it.actualStock}</td>
+                      <td className="py-2 text-center font-bold">
+                        <span
+                          className={
+                            it.difference === 0
+                              ? 'text-slate-400'
+                              : it.difference > 0
+                              ? 'text-emerald-600'
+                              : 'text-rose-600'
+                          }
+                        >
+                          {it.difference > 0 ? `+${it.difference}` : it.difference}
+                        </span>
+                      </td>
+                      {canViewCosts && (
+                        <td className="py-2 text-right font-mono">
+                          {it.differenceValue.toLocaleString('vi-VN')} đ
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between text-xs">
+              <div>
+                <span className="text-slate-500">Người thực hiện: </span>
+                <span className="font-semibold">{selectedStocktakeReport.creatorName}</span>
+                {selectedStocktakeReport.balancedBy && (
+                  <span className="text-emerald-600 ml-2 font-medium">(Đã phê duyệt: {selectedStocktakeReport.balancedBy})</span>
+                )}
+              </div>
+              <div className="font-bold text-slate-900 dark:text-white">
+                Tổng lệch: {selectedStocktakeReport.totalDiscrepancyAmount.toLocaleString('vi-VN')} đ
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => exportStocktakeExcel(selectedStocktakeReport)}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
+              >
+                <Download className="w-4 h-4 text-emerald-600" />
+                Xuất Báo Cáo CSV
+              </button>
+              <button
+                onClick={() => setSelectedStocktakeReport(null)}
+                className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STOCK ALERT & SMART REORDER HUB MODAL */}
+      {isStockAlertModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 px-6 py-4 backdrop-blur">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Trung Tâm Cảnh Báo Tồn Kho & Đề Xuất Nhập Bù Kho (Smart Reorder Hub)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Tự động phân tích sản phẩm chạm ngưỡng tồn an toàn tối thiểu và đề xuất số lượng đặt hàng từ nhà cung cấp
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsStockAlertModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Summary stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20">
+                  <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">Số Mặt Hàng Thiếu Kho</span>
+                  <div className="text-xl font-bold text-amber-800 dark:text-amber-200 mt-1">
+                    {lowStockAlerts.length} SKU
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-sky-200 dark:border-sky-900/40 bg-sky-50/50 dark:bg-sky-950/20">
+                  <span className="text-[11px] text-sky-700 dark:text-sky-400 font-medium">Tổng SL Đề Xuất Nhập</span>
+                  <div className="text-xl font-bold text-sky-800 dark:text-sky-200 mt-1">
+                    {lowStockAlerts.reduce((sum, a) => sum + a.suggestedReorderQuantity, 0)} sản phẩm
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20">
+                  <span className="text-[11px] text-indigo-700 dark:text-indigo-400 font-medium">Dự Toán Vốn Cần Nhập</span>
+                  <div className="text-xl font-bold text-indigo-800 dark:text-indigo-200 mt-1">
+                    {canViewCosts
+                      ? `${lowStockAlerts
+                          .reduce((sum, a) => sum + a.suggestedReorderQuantity * a.costPrice, 0)
+                          .toLocaleString('vi-VN')} đ`
+                      : '•••••••• đ'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 font-semibold">
+                      <th className="py-2.5 px-3">Mặt Hàng & SKU</th>
+                      <th className="py-2.5 px-3 text-center">Tồn Hiện Tại</th>
+                      <th className="py-2.5 px-3 text-center">Ngưỡng Tối Thiểu</th>
+                      <th className="py-2.5 px-3 text-center">Đề Xuất Nhập Bù</th>
+                      {canViewCosts && <th className="py-2.5 px-3 text-right">Dự Toán Vốn</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {lowStockAlerts.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-slate-400">
+                          🎉 Kho hàng an toàn! Hiện không có sản phẩm nào chạm ngưỡng tối thiểu.
+                        </td>
+                      </tr>
+                    ) : (
+                      lowStockAlerts.map(alert => (
+                        <tr key={alert.productId} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                          <td className="py-2.5 px-3">
+                            <span className="font-semibold text-slate-900 dark:text-white block">{alert.productName}</span>
+                            <span className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400">{alert.sku}</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
+                              {alert.currentStock} {alert.baseUnit}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-center text-slate-600 dark:text-slate-400 font-medium">
+                            {alert.minStockAlert} {alert.baseUnit}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-bold text-emerald-600">
+                            +{alert.suggestedReorderQuantity} {alert.baseUnit}
+                          </td>
+                          {canViewCosts && (
+                            <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                              {(alert.suggestedReorderQuantity * alert.costPrice).toLocaleString('vi-VN')} đ
+                            </td>
+                          )}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <p className="text-[11px] text-slate-500">
+                  ⚡ Tính năng Smart Reorder sẽ tự động điền danh sách trên vào Phiếu Nhập Kho với NCC phù hợp.
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsStockAlertModalOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+                  >
+                    Đóng
+                  </button>
+                  {lowStockAlerts.length > 0 && (
+                    <button
+                      onClick={handleTransferAlertsToInbound}
+                      className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-md flex items-center gap-1.5 transition-colors"
+                    >
+                      <ArrowDownLeft className="w-4 h-4" />
+                      Chuyển Vào Phiếu Nhập Hàng
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

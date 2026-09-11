@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { ROLE_PERMISSIONS, UserRole } from "@/types/erp";
+import { signJWT } from "@/lib/jwt";
 
 export const dynamic = "force-dynamic";
 
@@ -110,9 +111,10 @@ export async function POST(request: Request) {
     // Auto-seed demo users if database is fresh
     await ensureDemoUsers();
 
-    // Look up user in Database
+    // Look up user in Database with linked employee
     let user = await prisma.user.findUnique({
       where: { email: cleanEmail },
+      include: { employee: true },
     });
 
     // Fallback search in employees table if user registered via seed or another way
@@ -121,7 +123,7 @@ export async function POST(request: Request) {
         where: { email: cleanEmail },
       });
       if (emp) {
-        // Auto create user account for this existing employee
+        // Auto create user account for this existing employee and link
         const hashedPassword = hashPassword(password);
         user = await prisma.user.create({
           data: {
@@ -133,8 +135,15 @@ export async function POST(request: Request) {
             roleTitle: emp.roleTitle || "Nhân Viên",
             businessName: "Tập Đoàn Bán Lẻ & Phân Phối NEXUS",
             businessScale: emp.branch,
+            branchId: emp.branchId,
             status: emp.status || "active",
           },
+          include: { employee: true },
+        });
+
+        await prisma.employee.update({
+          where: { id: emp.id },
+          data: { userId: user.id },
         });
       }
     }
@@ -174,9 +183,23 @@ export async function POST(request: Request) {
     const role = (user.role as UserRole) || "cashier";
     const permissions = ROLE_PERMISSIONS[role] || [];
 
-    return NextResponse.json({
+    // Issue JWT token with 7-day expiration
+    const token = await signJWT({
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role,
+      roleTitle: user.roleTitle,
+      branchId: user.branchId || user.employee?.branchId || undefined,
+      warehouseId: user.warehouseId || undefined,
+      employeeId: user.employee?.id || undefined,
+      permissions,
+    });
+
+    const response = NextResponse.json({
       success: true,
       message: `Chào mừng ${user.name}! Đăng nhập thành công với vai trò ${user.roleTitle || role}.`,
+      token,
       data: {
         id: user.id,
         name: user.name,
@@ -186,9 +209,24 @@ export async function POST(request: Request) {
         roleTitle: user.roleTitle,
         businessName: user.businessName,
         businessScale: user.businessScale,
+        branchId: user.branchId || user.employee?.branchId,
+        warehouseId: user.warehouseId,
+        employeeId: user.employee?.id,
+        employeeCode: user.employee?.code,
         permissions,
       },
     });
+
+    // Set secure HTTP-only cookie
+    response.cookies.set("nexus_session", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+      path: "/",
+    });
+
+    return response;
   } catch (error) {
     console.error("Login API error:", error);
     return NextResponse.json(

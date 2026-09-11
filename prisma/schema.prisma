@@ -39,6 +39,12 @@ model Product {
   serials         SerialItem[]
   orderItems      OrderItem[]
   warrantyTickets WarrantyTicket[]
+  stockBalances   StockBalance[]
+  stockLedgers    StockLedger[]
+  inboundItems    StockInboundItem[]
+  outboundItems   StockOutboundItem[]
+  transferItems   WarehouseTransferItem[]
+  stocktakeItems  StocktakeItem[]
 
   @@index([category])
   @@index([barcode])
@@ -225,24 +231,28 @@ model Supplier {
 // ---------------------------------------------------------
 
 model Employee {
-  id                    String   @id @default(uuid())
-  code                  String   @unique // e.g. "NV-001"
+  id                    String    @id @default(uuid())
+  code                  String    @unique // e.g. "NV-001"
   name                  String
-  phone                 String   @default("")
-  email                 String   @default("")
-  role                  String   @default("cashier") // "admin", "manager", "cashier", "warehouse", "accountant"
-  roleTitle             String   @default("Nhân Viên")
-  branch                String   @default("Kho Tổng")
-  status                String   @default("active") // "active", "inactive"
-  hireDate              String   @default("")
-  baseSalary            Float    @default(0)
-  commissionRate        Float    @default(0)
-  totalOrdersHandled    Int      @default(0)
-  totalRevenueGenerated Float    @default(0)
+  phone                 String    @default("")
+  email                 String    @default("")
+  role                  String    @default("cashier") // "admin", "manager", "cashier", "warehouse", "accountant"
+  roleTitle             String    @default("Nhân Viên")
+  branch                String    @default("Kho Tổng")
+  branchId              String?
+  branchRel             Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  userId                String?   @unique
+  user                  User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status                String    @default("active") // "active", "inactive"
+  hireDate              String    @default("")
+  baseSalary            Float     @default(0)
+  commissionRate        Float     @default(0)
+  totalOrdersHandled    Int       @default(0)
+  totalRevenueGenerated Float     @default(0)
   notes                 String?
   avatar                String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@map("employees")
 }
@@ -274,6 +284,10 @@ model Order {
   salesChannel    String      @default("pos") // "pos", "b2b", "online"
   invoiceNumber   String?
   customerTaxId   String?
+  warehouseId     String?
+  warehouse       Warehouse?  @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  branchId        String?
+  branch          Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -392,37 +406,43 @@ model CreditApprovalRequest {
 // ---------------------------------------------------------
 
 model StockInboundReceipt {
-  id            String   @id @default(uuid())
-  code          String   @unique // e.g. "PNK-20260910-001"
+  id            String               @id @default(uuid())
+  code          String               @unique // e.g. "PNK-20260910-001"
   date          String
   supplierId    String
   supplierName  String
   creatorName   String
-  totalCost     Float    @default(0)
-  paidAmount    Float    @default(0)
-  debtAmount    Float    @default(0)
-  paymentMethod String   @default("bank_transfer")
+  totalCost     Float                @default(0)
+  paidAmount    Float                @default(0)
+  debtAmount    Float                @default(0)
+  paymentMethod String               @default("bank_transfer")
   notes         String?
-  status        String   @default("completed") // "completed", "draft"
-  items         Json     // Array of StockInboundItem
-  createdAt     DateTime @default(now())
+  status        String               @default("completed") // "completed", "draft"
+  items         Json?                // Array of StockInboundItem (backward compatibility)
+  warehouseId   String?
+  warehouse     Warehouse?           @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  inboundItems  StockInboundItem[]
+  createdAt     DateTime             @default(now())
 
   @@map("stock_inbound_receipts")
 }
 
 model StockOutboundReceipt {
-  id          String   @id @default(uuid())
-  code        String   @unique // e.g. "PXK-20260910-001"
-  date        String
-  reason      String   // "damaged", "internal_use", "loss", "transfer", "other"
-  reasonLabel String
-  creatorName String
-  destination String?
-  totalCost   Float    @default(0)
-  notes       String?
-  status      String   @default("completed")
-  items       Json     // Array of StockOutboundItem
-  createdAt   DateTime @default(now())
+  id            String               @id @default(uuid())
+  code          String               @unique // e.g. "PXK-20260910-001"
+  date          String
+  reason        String               // "damaged", "internal_use", "loss", "transfer", "other"
+  reasonLabel   String
+  creatorName   String
+  destination   String?
+  totalCost     Float                @default(0)
+  notes         String?
+  status        String               @default("completed")
+  items         Json?                // Array of StockOutboundItem (backward compatibility)
+  warehouseId   String?
+  warehouse     Warehouse?           @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  outboundItems StockOutboundItem[]
+  createdAt     DateTime             @default(now())
 
   @@map("stock_outbound_receipts")
 }
@@ -445,6 +465,52 @@ model ReturnReceipt {
   createdAt         DateTime @default(now())
 
   @@map("return_receipts")
+}
+
+model StocktakeReport {
+  id                     String          @id @default(uuid())
+  code                   String          @unique // e.g. "PKK-20260910-001"
+  date                   String
+  warehouseLocation      String?         @default("Kho Tổng")
+  warehouseId            String?
+  warehouse              Warehouse?      @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  creatorName            String
+  items                  Json?           // Array of StocktakeItem (backward compatibility)
+  stocktakeItems         StocktakeItem[]
+  totalDiscrepancyAmount Float           @default(0)
+  status                 String          @default("balanced") // "balanced", "pending"
+  notes                  String?
+  balancedAt             String?
+  balancedBy             String?
+  createdAt              DateTime        @default(now())
+
+  @@map("stocktake_reports")
+}
+
+model WarehouseTransfer {
+  id                 String                  @id @default(uuid())
+  code               String                  @unique // e.g. "CK-20260911-001"
+  date               String
+  sourceWarehouse    String                  @default("Kho Tổng")
+  sourceWarehouseId  String?
+  sourceWarehouseRel Warehouse?              @relation("TransferSource", fields: [sourceWarehouseId], references: [id], onDelete: SetNull)
+  targetWarehouse    String                  @default("Chi nhánh Bình Tân")
+  targetWarehouseId  String?
+  targetWarehouseRel Warehouse?              @relation("TransferTarget", fields: [targetWarehouseId], references: [id], onDelete: SetNull)
+  creatorName        String
+  receiverName       String?
+  status             String                  @default("pending") // "pending", "in_transit", "completed", "cancelled"
+  items              Json?                   // Array of WarehouseTransferItem (backward compatibility)
+  transferItems      WarehouseTransferItem[]
+  totalQuantity      Int                     @default(0)
+  totalCost          Float                   @default(0)
+  notes              String?
+  shippedAt          String?
+  receivedAt         String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@map("warehouse_transfers")
 }
 
 // ---------------------------------------------------------
@@ -476,9 +542,184 @@ model User {
   businessScale String?
   avatar        String?
   status        String    @default("active") // "active", "inactive"
+  branchId      String?
+  warehouseId   String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  employee      Employee?
+
   @@map("users")
+}
+
+// ---------------------------------------------------------
+// 11. MASTER KHO & CHI NHÁNH (Branches & Warehouses)
+// ---------------------------------------------------------
+
+model Branch {
+  id          String      @id @default(uuid())
+  code        String      @unique // "CN-TONG", "CN-Q1", "CN-BT"
+  name        String
+  address     String      @default("")
+  phone       String      @default("")
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  warehouses  Warehouse[]
+  employees   Employee[]
+  orders      Order[]
+
+  @@map("branches")
+}
+
+model Warehouse {
+  id              String                @id @default(uuid())
+  code            String                @unique // "KHO-TONG", "KHO-Q1", "KHO-BT"
+  name            String
+  branchId        String?
+  branch          Branch?               @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  address         String                @default("")
+  phone           String                @default("")
+  isDefault       Boolean               @default(false)
+  isActive        Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  stockBalances   StockBalance[]
+  stockLedgers    StockLedger[]
+  inbounds        StockInboundReceipt[]
+  outbounds       StockOutboundReceipt[]
+  stocktakes      StocktakeReport[]
+  sourceTransfers WarehouseTransfer[]   @relation("TransferSource")
+  targetTransfers WarehouseTransfer[]   @relation("TransferTarget")
+  orders          Order[]
+
+  @@map("warehouses")
+}
+
+// ---------------------------------------------------------
+// 12. SỔ TỒN KHO & THẺ KHO BIẾN ĐỘNG (Stock Balance & Ledger)
+// ---------------------------------------------------------
+
+model StockBalance {
+  id               String    @id @default(uuid())
+  productId        String
+  product          Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId      String
+  warehouse        Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  quantity         Int       @default(0) // Số lượng tồn thực tế (base unit)
+  reservedQuantity Int       @default(0) // Số lượng giữ cho đơn hàng chờ xuất
+  minStockAlert    Int       @default(10)
+  maxStockLimit    Int       @default(1000)
+  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime  @default(now())
+
+  @@unique([productId, warehouseId])
+  @@index([warehouseId])
+  @@index([productId])
+  @@map("stock_balances")
+}
+
+model StockLedger {
+  id             String    @id @default(uuid())
+  code           String    @unique // e.g. "TK-20260911-0001"
+  productId      String
+  product        Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId    String
+  warehouse      Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  type           String    // "INBOUND", "OUTBOUND", "SALE", "SALE_RETURN", "TRANSFER_OUT", "TRANSFER_IN", "STOCKTAKE_ADJUST", "INITIAL"
+  referenceType  String?   // "Order", "StockInboundReceipt", "StockOutboundReceipt", "WarehouseTransfer", "StocktakeReport"
+  referenceId    String?
+  referenceCode  String?
+  quantityChange Int       // +/- delta (e.g. +50 hoặc -3)
+  balanceBefore  Int       @default(0)
+  balanceAfter   Int       @default(0)
+  costPrice      Float     @default(0)
+  notes          String?
+  createdById    String?
+  createdByName  String?   @default("Hệ Thống")
+  createdAt      DateTime  @default(now())
+
+  @@index([productId])
+  @@index([warehouseId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("stock_ledgers")
+}
+
+// ---------------------------------------------------------
+// 13. CHI TIẾT QUAN HỆ CÁC PHIẾU KHO (Receipt Items Relations)
+// ---------------------------------------------------------
+
+model StockInboundItem {
+  id             String              @id @default(uuid())
+  receiptId      String
+  receipt        StockInboundReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sku            String
+  name           String
+  unitName       String              @default("Cái")
+  conversionRate Int                 @default(1)
+  quantity       Int                 @default(1)
+  unitCost       Float               @default(0)
+  totalCost      Float               @default(0)
+  batchId        String?
+  serials        Json?
+
+  @@index([receiptId])
+  @@map("stock_inbound_items")
+}
+
+model StockOutboundItem {
+  id        String               @id @default(uuid())
+  receiptId String
+  receipt   StockOutboundReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sku       String
+  name      String
+  quantity  Int                  @default(1)
+  unitCost  Float                @default(0)
+  totalCost Float                @default(0)
+  reason    String?
+
+  @@index([receiptId])
+  @@map("stock_outbound_items")
+}
+
+model WarehouseTransferItem {
+  id         String            @id @default(uuid())
+  transferId String
+  transfer   WarehouseTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId  String?
+  product    Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sku        String
+  name       String
+  quantity   Int               @default(1)
+  unitCost   Float             @default(0)
+  totalCost  Float             @default(0)
+
+  @@index([transferId])
+  @@map("warehouse_transfer_items")
+}
+
+model StocktakeItem {
+  id               String          @id @default(uuid())
+  reportId         String
+  report           StocktakeReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  productId        String?
+  product          Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sku              String
+  name             String
+  systemStock      Int             @default(0)
+  actualStock      Int             @default(0)
+  discrepancy      Int             @default(0)
+  unitCost         Float           @default(0)
+  discrepancyValue Float           @default(0)
+
+  @@index([reportId])
+  @@map("stocktake_items")
 }
 

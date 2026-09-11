@@ -1,41 +1,102 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { ERPProvider, useERP } from '@/context/ERPContext';
 import { getViewFromSlug, getPathFromView } from '@/lib/routes';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
-import { VietQRModal } from '@/components/modals/VietQRModal';
-import { ManagerPinModal } from '@/components/modals/ManagerPinModal';
-import { BarcodeScannerModal } from '@/components/modals/BarcodeScannerModal';
-import { PrintSuiteModal } from '@/components/modals/PrintSuiteModal';
-import { CreditApprovalDrawer } from '@/components/modals/CreditApprovalDrawer';
-
-// Views
-import { DashboardView } from '@/components/views/DashboardView';
-import { POSView } from '@/components/views/POSView';
-import { OrderManagementView } from '@/components/views/OrderManagementView';
-import { ShiftView } from '@/components/views/ShiftView';
-import { WarehouseView } from '@/components/views/WarehouseView';
-import { CustomerView } from '@/components/views/CustomerView';
-import { DebtAgingView } from '@/components/views/DebtAgingView';
-import { CashFlowView } from '@/components/views/CashFlowView';
-import { ApprovalsBoardView } from '@/components/views/ApprovalsBoardView';
-import { SettingsView } from '@/components/views/SettingsView';
-import { AuthView } from '@/components/views/AuthView';
-import { ProductView } from '@/components/views/ProductView';
-import { EmployeeView } from '@/components/views/EmployeeView';
-import { SupplierView } from '@/components/views/SupplierView';
-import { InventoryView } from '@/components/views/InventoryView';
-import { ReturnView } from '@/components/views/ReturnView';
-import { WarrantyView } from '@/components/views/WarrantyView';
-import { SerialManagementView } from '@/components/views/SerialManagementView';
-import { SalesReportView } from '@/components/views/SalesReportView';
-import { InternalChatView } from '@/components/views/InternalChatView';
-import { InternalChatWidget } from '@/components/chat/InternalChatWidget';
-
 import { UnauthorizedView } from '@/components/common/UnauthorizedView';
 import { ROLE_CONFIG, PermissionKey } from '@/types/erp';
+
+// Lightweight Shimmer Skeleton for smooth view transitions during code splitting
+const ViewSkeleton: React.FC<{ title?: string }> = ({ title }) => (
+  <div className="p-6 space-y-4 animate-in fade-in duration-150">
+    <div className="flex items-center justify-between">
+      <div className="space-y-1.5">
+        <div className="h-6 w-48 rounded-lg bg-slate-200 dark:bg-slate-800 animate-pulse" />
+        <div className="h-3 w-64 rounded bg-slate-100 dark:bg-slate-800/60 animate-pulse" />
+      </div>
+      <div className="h-9 w-28 rounded-lg bg-indigo-500/20 animate-pulse" />
+    </div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} className="h-20 rounded-xl bg-slate-100 dark:bg-slate-800/60 animate-pulse" />
+      ))}
+    </div>
+    <div className="h-96 rounded-2xl bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 animate-pulse" />
+  </div>
+);
+
+// Dynamic Lazy-Loaded Views for High-Performance Code Splitting (Bundle Reduction)
+const DashboardView = dynamic(() => import('@/components/views/DashboardView').then(m => m.DashboardView), {
+  loading: () => <ViewSkeleton title="Dashboard" />
+});
+const POSView = dynamic(() => import('@/components/views/POSView').then(m => m.POSView), {
+  loading: () => <ViewSkeleton title="Bán Hàng POS" />
+});
+const OrderManagementView = dynamic(() => import('@/components/views/OrderManagementView').then(m => m.OrderManagementView), {
+  loading: () => <ViewSkeleton title="Đơn Hàng" />
+});
+const ShiftView = dynamic(() => import('@/components/views/ShiftView').then(m => m.ShiftView), {
+  loading: () => <ViewSkeleton title="Ca Bán" />
+});
+const WarehouseView = dynamic(() => import('@/components/views/WarehouseView').then(m => m.WarehouseView), {
+  loading: () => <ViewSkeleton title="Kho Hàng & ĐVT" />
+});
+const CustomerView = dynamic(() => import('@/components/views/CustomerView').then(m => m.CustomerView), {
+  loading: () => <ViewSkeleton title="Khách Hàng" />
+});
+const DebtAgingView = dynamic(() => import('@/components/views/DebtAgingView').then(m => m.DebtAgingView), {
+  loading: () => <ViewSkeleton title="Công Nợ" />
+});
+const CashFlowView = dynamic(() => import('@/components/views/CashFlowView').then(m => m.CashFlowView), {
+  loading: () => <ViewSkeleton title="Thu Chi" />
+});
+const ApprovalsBoardView = dynamic(() => import('@/components/views/ApprovalsBoardView').then(m => m.ApprovalsBoardView), {
+  loading: () => <ViewSkeleton title="Xét Duyệt Tín Dụng" />
+});
+const SettingsView = dynamic(() => import('@/components/views/SettingsView').then(m => m.SettingsView), {
+  loading: () => <ViewSkeleton title="Cài Đặt" />
+});
+const AuthView = dynamic(() => import('@/components/views/AuthView').then(m => m.AuthView), {
+  loading: () => <ViewSkeleton title="Đăng Nhập" />
+});
+const ProductView = dynamic(() => import('@/components/views/ProductView').then(m => m.ProductView), {
+  loading: () => <ViewSkeleton title="Sản Phẩm" />
+});
+const EmployeeView = dynamic(() => import('@/components/views/EmployeeView').then(m => m.EmployeeView), {
+  loading: () => <ViewSkeleton title="Nhân Viên" />
+});
+const SupplierView = dynamic(() => import('@/components/views/SupplierView').then(m => m.SupplierView), {
+  loading: () => <ViewSkeleton title="Nhà Cung Cấp" />
+});
+const InventoryView = dynamic(() => import('@/components/views/InventoryView').then(m => m.InventoryView), {
+  loading: () => <ViewSkeleton title="Xuất Nhập Tồn & Kiểm Kê" />
+});
+const ReturnView = dynamic(() => import('@/components/views/ReturnView').then(m => m.ReturnView), {
+  loading: () => <ViewSkeleton title="Đổi Trả Hàng" />
+});
+const WarrantyView = dynamic(() => import('@/components/views/WarrantyView').then(m => m.WarrantyView), {
+  loading: () => <ViewSkeleton title="Bảo Hành" />
+});
+const SerialManagementView = dynamic(() => import('@/components/views/SerialManagementView').then(m => m.SerialManagementView), {
+  loading: () => <ViewSkeleton title="Serial/IMEI" />
+});
+const SalesReportView = dynamic(() => import('@/components/views/SalesReportView').then(m => m.SalesReportView), {
+  loading: () => <ViewSkeleton title="Báo Cáo Doanh Thu" />
+});
+const InternalChatView = dynamic(() => import('@/components/views/InternalChatView').then(m => m.InternalChatView), {
+  loading: () => <ViewSkeleton title="Chat Nội Bộ" />
+});
+
+// Dynamic Lazy Modals & Drawers
+const VietQRModal = dynamic(() => import('@/components/modals/VietQRModal').then(m => m.VietQRModal), { ssr: false });
+const ManagerPinModal = dynamic(() => import('@/components/modals/ManagerPinModal').then(m => m.ManagerPinModal), { ssr: false });
+const BarcodeScannerModal = dynamic(() => import('@/components/modals/BarcodeScannerModal').then(m => m.BarcodeScannerModal), { ssr: false });
+const PrintSuiteModal = dynamic(() => import('@/components/modals/PrintSuiteModal').then(m => m.PrintSuiteModal), { ssr: false });
+const CreditApprovalDrawer = dynamic(() => import('@/components/modals/CreditApprovalDrawer').then(m => m.CreditApprovalDrawer), { ssr: false });
+const InternalChatWidget = dynamic(() => import('@/components/chat/InternalChatWidget').then(m => m.InternalChatWidget), { ssr: false });
 
 interface NexusAppProps {
   initialView?: string;

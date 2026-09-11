@@ -12,6 +12,10 @@ export interface AuthUser {
   businessName: string;
   businessScale?: string;
   avatar?: string;
+  branchId?: string;
+  warehouseId?: string;
+  employeeId?: string;
+  employeeCode?: string;
 }
 
 export type PermissionKey =
@@ -183,6 +187,7 @@ export interface ProductCategory {
 export interface ProductBatch {
   batchId: string;
   sku: string;
+  productId?: string;
   productionDate: string;
   expiryDate: string;
   quantityBaseUnits: number;
@@ -198,7 +203,7 @@ export interface SerialTimelineEvent {
   action: 'imported' | 'sold' | 'warranty_received' | 'warranty_returned' | 'status_changed';
   description: string;
   referenceCode?: string;
-  actor: string;
+  actor?: string;
 }
 
 export interface SerialItem {
@@ -217,6 +222,23 @@ export interface SerialItem {
   timeline?: SerialTimelineEvent[];
 }
 
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  sku: string;
+  name: string;
+  size?: string; // "S", "M", "L", "XL", "XXL", "38", "39", "40", "1L", "4L", "18L", "200L"
+  color?: string; // "Đen", "Trắng", "Xanh", "Đỏ", "Vàng"
+  barcode?: string;
+  costPrice?: number;
+  priceRetail: number;
+  priceDifference?: number;
+  priceWholesale?: number;
+  priceVip?: number;
+  stockBaseUnits: number;
+  imageUrl?: string;
+}
+
 export interface Product {
   id: string;
   sku: string;
@@ -233,6 +255,8 @@ export interface Product {
   minStockThreshold?: number;
   hasSerial: boolean;
   hasExpiry: boolean;
+  hasVariants?: boolean;
+  variants?: ProductVariant[];
   barcode: string;
   imageUrl?: string;
   image?: string;
@@ -400,6 +424,9 @@ export interface Employee {
   role: EmployeeRole;
   roleTitle: string; // "Quản Trị Viên", "Cửa Hàng Trưởng", "Thu Ngân", "Thủ Kho", "Kế Toán"
   branch: string;
+  branchId?: string | null;
+  warehouseId?: string | null;
+  userId?: string | null;
   status: 'active' | 'inactive';
   hireDate: string;
   baseSalary: number; // Lương cơ bản VND
@@ -503,14 +530,64 @@ export interface StocktakeReport {
   id: string;
   code: string; // e.g. "PKK-20260910-001"
   date: string;
+  warehouseLocation?: string;
   creatorName: string;
   items: StocktakeItem[];
   totalDiscrepancyAmount: number;
   status: 'balanced' | 'pending';
   notes?: string;
+  balancedAt?: string;
+  balancedBy?: string;
 }
 
-// 4. Quản lý Trả hàng (Returns / Refunds)
+// 4. Quản lý Điều Chuyển Kho Nội Bộ (Internal Warehouse Transfer)
+export type TransferStatus = 'pending' | 'in_transit' | 'completed' | 'cancelled';
+
+export interface WarehouseTransferItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  unitName: string;
+  conversionRate: number;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  batchNumber?: string;
+}
+
+export interface WarehouseTransfer {
+  id: string;
+  code: string; // e.g. "CK-20260911-001"
+  date: string;
+  sourceWarehouse: string; // e.g. "Kho Tổng"
+  targetWarehouse: string; // e.g. "Chi nhánh Bình Tân"
+  creatorName: string;
+  receiverName?: string;
+  status: TransferStatus;
+  items: WarehouseTransferItem[];
+  totalQuantity: number;
+  totalCost: number;
+  notes?: string;
+  shippedAt?: string;
+  receivedAt?: string;
+}
+
+// 5. Cảnh Báo Tồn Kho & Đề Xuất Nhập Hàng (Stock Alert & Reorder)
+export interface StockAlertItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  category: string;
+  baseUnit: string;
+  currentStock: number;
+  minStockAlert: number;
+  status: 'out_of_stock' | 'critical' | 'low';
+  suggestedReorderQuantity: number;
+  costPrice: number;
+  estimatedReorderCost: number;
+}
+
+// 6. Quản lý Trả hàng (Returns / Refunds)
 export interface ReturnItem {
   productId: string;
   productName: string;
@@ -621,4 +698,135 @@ export interface ChatChannel {
   recipientAvatar?: string;
   isOnline?: boolean;
 }
+
+// ---------------------------------------------------------
+// 7. Master Kho & Chi Nhánh (Branches & Warehouses)
+// ---------------------------------------------------------
+
+export interface Branch {
+  id: string;
+  code: string; // "CN-TONG", "CN-Q1", "CN-BT"
+  name: string;
+  address: string;
+  phone: string;
+  isActive: boolean;
+  warehouses?: Warehouse[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Warehouse {
+  id: string;
+  code: string; // "KHO-TONG", "KHO-Q1", "KHO-BT"
+  name: string;
+  branchId?: string | null;
+  branch?: Branch | null;
+  address: string;
+  phone: string;
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ---------------------------------------------------------
+// 8. Sổ Tồn Kho & Thẻ Kho Biến Động (Stock Balance & Ledger)
+// ---------------------------------------------------------
+
+export interface StockBalance {
+  id: string;
+  productId: string;
+  product?: Partial<Product>;
+  warehouseId: string;
+  warehouse?: Partial<Warehouse>;
+  quantity: number; // Tồn thực tế base unit
+  reservedQuantity: number;
+  minStockAlert: number;
+  maxStockLimit: number;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+export type StockMovementType =
+  | 'INBOUND'
+  | 'OUTBOUND'
+  | 'SALE'
+  | 'SALE_RETURN'
+  | 'TRANSFER_OUT'
+  | 'TRANSFER_IN'
+  | 'STOCKTAKE_ADJUST'
+  | 'INITIAL';
+
+export interface StockLedger {
+  id: string;
+  code: string; // "TK-20260911-0001"
+  productId: string;
+  product?: Partial<Product>;
+  warehouseId: string;
+  warehouse?: Partial<Warehouse>;
+  type: StockMovementType;
+  referenceType?: string;
+  referenceId?: string;
+  referenceCode?: string;
+  quantityChange: number; // +/-
+  balanceBefore: number;
+  balanceAfter: number;
+  costPrice: number;
+  notes?: string;
+  createdById?: string;
+  createdByName?: string;
+  createdAt: string;
+}
+
+export interface StockInboundItemDetail {
+  id?: string;
+  receiptId?: string;
+  productId?: string;
+  sku: string;
+  name: string;
+  unitName: string;
+  conversionRate: number;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  batchId?: string;
+  serials?: string[];
+}
+
+export interface StockOutboundItemDetail {
+  id?: string;
+  receiptId?: string;
+  productId?: string;
+  sku: string;
+  name: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  reason?: string;
+}
+
+export interface WarehouseTransferItemDetail {
+  id?: string;
+  transferId?: string;
+  productId?: string;
+  sku: string;
+  name: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+}
+
+export interface StocktakeItemDetail {
+  id?: string;
+  reportId?: string;
+  productId?: string;
+  sku: string;
+  name: string;
+  systemStock: number;
+  actualStock: number;
+  discrepancy: number;
+  unitCost: number;
+  discrepancyValue: number;
+}
+
 

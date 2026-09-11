@@ -12,7 +12,9 @@ import {
   StockInboundReceipt,
   StockOutboundReceipt,
   ReturnReceipt,
-  WarrantyTicket
+  WarrantyTicket,
+  WarehouseTransfer,
+  StocktakeReport
 } from '../types/erp';
 
 export const INITIAL_PRODUCTS: Product[] = [
@@ -1594,5 +1596,137 @@ export const INITIAL_WARRANTIES: WarrantyTicket[] = [
     notes: 'Khách hàng đã nhận máy và ký biên bản hài lòng'
   }
 ];
+
+export const INITIAL_STOCKTAKES: StocktakeReport[] = [
+  {
+    id: 'st-1',
+    code: 'PKK-20260908-001',
+    date: '2026-09-08 17:30',
+    warehouseLocation: 'Kho Tổng',
+    creatorName: 'Trần Văn Cường (Thủ Kho)',
+    totalDiscrepancyAmount: 4600000,
+    status: 'balanced',
+    balancedAt: '2026-09-08 18:00',
+    balancedBy: 'Nguyễn Thanh Long (Quản Lý)',
+    notes: 'Kiểm kê định kỳ tháng 9 ngành hàng Điện Máy & Gia Dụng. Chênh lệch do hàng mẫu trưng bày.',
+    items: [
+      {
+        productId: 'prod-1',
+        sku: 'DM-SAM-43CU8000',
+        productName: 'Smart Tivi Samsung 43 inch Crystal UHD 4K (43CU8000)',
+        unitName: 'Chiếc',
+        systemStock: 29,
+        actualStock: 28,
+        difference: -1,
+        unitCost: 7200000,
+        differenceValue: -7200000,
+        note: '01 chiếc chuyển làm hàng mẫu tại quầy'
+      },
+      {
+        productId: 'prod-2',
+        sku: 'DM-PANA-NR-BA189',
+        productName: 'Tủ Lạnh Panasonic Inverter 180 Lít (NR-BA189PAVN)',
+        unitName: 'Chiếc',
+        systemStock: 14,
+        actualStock: 15,
+        difference: 1,
+        unitCost: 4600000,
+        differenceValue: 4600000,
+        note: 'Thừa 1 chiếc do đơn trả hàng chưa kịp cập nhật số sách'
+      },
+      {
+        productId: 'prod-3',
+        sku: 'GD-SHARP-KS181',
+        productName: 'Nồi Cơm Điện Nắp Gài Sharp 1.8 Lít (KS-181TJV)',
+        unitName: 'Chiếc',
+        systemStock: 42,
+        actualStock: 42,
+        difference: 0,
+        unitCost: 480000,
+        differenceValue: 0,
+        note: 'Khớp số liệu'
+      }
+    ]
+  }
+];
+
+export const INITIAL_TRANSFERS: WarehouseTransfer[] = [
+  {
+    id: 'tr-1',
+    code: 'CK-20260910-001',
+    date: '2026-09-10 09:30',
+    sourceWarehouse: 'Kho Tổng',
+    targetWarehouse: 'Chi nhánh Bình Tân',
+    creatorName: 'Trần Văn Cường (Thủ Kho)',
+    receiverName: 'Lê Minh Tuấn',
+    status: 'in_transit',
+    totalQuantity: 25,
+    totalCost: 18500000,
+    notes: 'Điều chuyển hàng bổ sung tồn kho bán lẻ cuối tuần cho chi nhánh Bình Tân',
+    shippedAt: '2026-09-10 10:15',
+    items: [
+      {
+        productId: 'prod-4',
+        productName: 'Nước Rửa Chén Sunlight Chanh Thiên Nhiên Can 10kg',
+        sku: 'HMP-SUNLIGHT-10KG',
+        unitName: 'Can',
+        conversionRate: 1,
+        quantity: 15,
+        unitCost: 175000,
+        totalCost: 2625000,
+        batchNumber: 'LOT-2026-004'
+      },
+      {
+        productId: 'prod-2',
+        productName: 'Tủ Lạnh Panasonic Inverter 180 Lít (NR-BA189PAVN)',
+        sku: 'DM-PANA-NR-BA189',
+        unitName: 'Chiếc',
+        conversionRate: 1,
+        quantity: 3,
+        unitCost: 4600000,
+        totalCost: 13800000
+      },
+      {
+        productId: 'prod-6',
+        productName: 'Máy Giặt Cửa Trên Toshiba 8.2 kg (AW-K900DV)',
+        sku: 'DM-TOSHIBA-82KG',
+        unitName: 'Chiếc',
+        conversionRate: 1,
+        quantity: 2,
+        unitCost: 3800000,
+        totalCost: 7600000
+      }
+    ]
+  },
+  {
+    id: 'tr-2',
+    code: 'CK-20260907-002',
+    date: '2026-09-07 14:00',
+    sourceWarehouse: 'Kho Tổng',
+    targetWarehouse: 'Chi nhánh Quận 1 (Trần Hưng Đạo)',
+    creatorName: 'Trần Văn Cường (Thủ Kho)',
+    receiverName: 'Phạm Thị Thùy Dung',
+    status: 'completed',
+    totalQuantity: 50,
+    totalCost: 35600000,
+    notes: 'Cấp hàng dầu nhớt và phụ gia động cơ theo yêu cầu đơn đặt trước',
+    shippedAt: '2026-09-07 14:30',
+    receivedAt: '2026-09-07 16:45',
+    items: [
+      {
+        productId: 'prod-5',
+        productName: 'Dầu Động Cơ Xe Máy Castrol Power 1 10W-40 4T (Thùng 24 Lon 0.8L)',
+        sku: 'DN-CASTROL-10W40',
+        unitName: 'Thùng (24 Lon)',
+        conversionRate: 24,
+        quantity: 10,
+        unitCost: 2450000,
+        totalCost: 24500000,
+        batchNumber: 'LOT-2026-003'
+      }
+    ]
+  }
+];
+
 
 

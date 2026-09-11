@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   description: "Browse commercial and industrial lubricants: Engine oils (15W-40, 10W-40, 5W-30), hydraulic oils (ISO VG 46, 68), and gear lubricants.",
 };
 
+export const revalidate = 3600; // ISR: 1 hour cache
+
 interface ProductItem {
   id: string;
   name: string;

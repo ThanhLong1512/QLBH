@@ -11,6 +11,8 @@ export const metadata: Metadata = {
   keywords: ["lubricant oil", "engine oil", "hydraulic oil", "DMS", "CRM", "distribution", "viscosity 10W-40", "15W-40"],
 };
 
+export const revalidate = 3600; // ISR: 1 hour cache
+
 export default function LandingPage() {
   const featuredOils = [
     {

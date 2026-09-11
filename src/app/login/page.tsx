@@ -8,6 +8,6 @@ const NexusApp = dynamic(() => import("@/components/NexusApp"), {
   loading: () => <AppShellSkeleton />,
 });
 
-export default function DashboardPage() {
-  return <NexusApp initialView="dashboard" />;
+export default function LoginPage() {
+  return <NexusApp initialView="auth" />;
 }

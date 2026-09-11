@@ -23,12 +23,18 @@ import {
   StockInboundReceipt,
   StockOutboundReceipt,
   StocktakeReport,
+  WarehouseTransfer,
+  StockAlertItem,
   ReturnReceipt,
   WarrantyTicket,
   WarrantyServiceRecord,
   ChatMessage,
   ChatAttachment,
-  ChatChannel
+  ChatChannel,
+  Warehouse,
+  Branch,
+  StockBalance,
+  StockLedger
 } from '../types/erp';
 import {
   INITIAL_PRODUCTS,
@@ -45,8 +51,11 @@ import {
   INITIAL_INBOUNDS,
   INITIAL_OUTBOUNDS,
   INITIAL_RETURNS,
-  INITIAL_WARRANTIES
+  INITIAL_WARRANTIES,
+  INITIAL_STOCKTAKES,
+  INITIAL_TRANSFERS
 } from '../data/mockData';
+import { getCachedData, setCachedData } from '../store/offlineDB';
 
 interface PrintModalState {
   isOpen: boolean;
@@ -133,14 +142,38 @@ interface ERPContextType {
   deleteSupplier: (id: string) => void;
   recordSupplierPayment: (supplierId: string, amount: number, paymentMethod: string, notes: string) => void;
 
-  // Inventory Import/Export/Balance (Xuất Nhập Tồn)
+  // Inventory Import/Export/Balance & Transfers (Xuất Nhập Tồn & Điều Chuyển)
   inbounds: StockInboundReceipt[];
   outbounds: StockOutboundReceipt[];
   stocktakes: StocktakeReport[];
+  transfers: WarehouseTransfer[];
   addInboundReceipt: (receipt: Omit<StockInboundReceipt, 'id' | 'code'>) => void;
   addOutboundReceipt: (receipt: Omit<StockOutboundReceipt, 'id' | 'code'>) => void;
   addStocktakeReport: (report: Omit<StocktakeReport, 'id' | 'code'>) => void;
   reconcileStocktake: (items: { productId: string; actualStock: number }[]) => void;
+  addWarehouseTransfer: (transfer: Omit<WarehouseTransfer, 'id' | 'code'>) => void;
+  updateTransferStatus: (transferId: string, status: WarehouseTransfer['status'], receiverName?: string) => void;
+  addBatch: (batch: ProductBatch) => void;
+
+  // Master Kho & Chi Nhánh (Branches & Warehouses)
+  warehouses: Warehouse[];
+  branches: Branch[];
+  activeWarehouse: Warehouse | null;
+  activeBranch: Branch | null;
+  setActiveWarehouse: (warehouse: Warehouse) => void;
+  setActiveBranch: (branch: Branch) => void;
+  addWarehouse: (warehouse: Partial<Warehouse>) => Promise<boolean>;
+  addBranch: (branch: Partial<Branch>) => Promise<boolean>;
+
+  // Sổ Tồn Kho & Thẻ Kho (Stock Balances & Ledgers)
+  stockBalances: StockBalance[];
+  stockLedgers: StockLedger[];
+  fetchStockLedger: (params?: { productId?: string; warehouseId?: string }) => Promise<void>;
+  fetchStockBalances: (warehouseId?: string) => Promise<void>;
+
+  // Stock Alerts & Reorder Hub (Cảnh Báo Tồn Kho & Đề Xuất Nhập Hàng)
+  lowStockAlerts: StockAlertItem[];
+  reorderRecommendations: StockAlertItem[];
 
   // Returns & Refunds Management (Quản lý trả hàng)
   returns: ReturnReceipt[];
@@ -389,90 +422,32 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : { botToken: '6892341029:AAH9f29103kLmNx', chatId: '-1001928472910', enabled: true };
   });
 
-  // Data Stores with LocalStorage fallback
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}products`);
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
-  });
+  // Data Stores (Database is Master Single Source of Truth, Client uses SWR Cache)
+  const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [batches, setBatches] = useState<ProductBatch[]>([]);
+  const [serials, setSerials] = useState<SerialItem[]>([]);
+  const [warranties, setWarranties] = useState<WarrantyTicket[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [shifts, setShifts] = useState<CashShift[]>([]);
+  const [transactions, setTransactions] = useState<CashTransaction[]>([]);
+  const [telegramAlerts, setTelegramAlerts] = useState<TelegramAlert[]>([]);
+  const [approvalRequests, setApprovalRequests] = useState<CreditApprovalRequest[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [inbounds, setInbounds] = useState<StockInboundReceipt[]>([]);
+  const [outbounds, setOutbounds] = useState<StockOutboundReceipt[]>([]);
+  const [stocktakes, setStocktakes] = useState<StocktakeReport[]>([]);
+  const [transfers, setTransfers] = useState<WarehouseTransfer[]>([]);
+  const [returns, setReturns] = useState<ReturnReceipt[]>([]);
 
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}customers`);
-    return saved ? JSON.parse(saved) : INITIAL_CUSTOMERS;
-  });
-
-  const [batches] = useState<ProductBatch[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}batches`);
-    return saved ? JSON.parse(saved) : INITIAL_BATCHES;
-  });
-
-  const [serials, setSerials] = useState<SerialItem[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}serials`);
-    return saved ? JSON.parse(saved) : INITIAL_SERIALS;
-  });
-
-  const [warranties, setWarranties] = useState<WarrantyTicket[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}warranties`);
-    return saved ? JSON.parse(saved) : INITIAL_WARRANTIES;
-  });
-
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}orders`);
-    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
-  });
-
-  const [shifts, setShifts] = useState<CashShift[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}shifts`);
-    return saved ? JSON.parse(saved) : INITIAL_SHIFTS;
-  });
-
-  const [transactions, setTransactions] = useState<CashTransaction[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}transactions`);
-    return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS;
-  });
-
-  const [telegramAlerts, setTelegramAlerts] = useState<TelegramAlert[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}alerts`);
-    return saved ? JSON.parse(saved) : INITIAL_ALERTS;
-  });
-
-  const [approvalRequests, setApprovalRequests] = useState<CreditApprovalRequest[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}approvals`);
-    return saved ? JSON.parse(saved) : INITIAL_APPROVALS;
-  });
-
-  // Employees State
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}employees`);
-    return saved ? JSON.parse(saved) : INITIAL_EMPLOYEES;
-  });
-
-  // Suppliers State
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}suppliers`);
-    return saved ? JSON.parse(saved) : INITIAL_SUPPLIERS;
-  });
-
-  // Inventory Inbounds & Outbounds & Stocktakes
-  const [inbounds, setInbounds] = useState<StockInboundReceipt[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}inbounds`);
-    return saved ? JSON.parse(saved) : INITIAL_INBOUNDS;
-  });
-
-  const [outbounds, setOutbounds] = useState<StockOutboundReceipt[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}outbounds`);
-    return saved ? JSON.parse(saved) : INITIAL_OUTBOUNDS;
-  });
-
-  const [stocktakes, setStocktakes] = useState<StocktakeReport[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}stocktakes`);
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // Returns & Refunds State
-  const [returns, setReturns] = useState<ReturnReceipt[]>(() => {
-    const saved = localStorage.getItem(`${STORAGE_PREFIX}returns`);
-    return saved ? JSON.parse(saved) : INITIAL_RETURNS;
-  });
+  // Master Kho, Chi Nhánh, Sổ Tồn Kho & Thẻ Kho
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [activeWarehouse, setActiveWarehouseState] = useState<Warehouse | null>(null);
+  const [activeBranch, setActiveBranchState] = useState<Branch | null>(null);
+  const [stockBalances, setStockBalances] = useState<StockBalance[]>([]);
+  const [stockLedgers, setStockLedgers] = useState<StockLedger[]>([]);
 
   // Active Toast
   const [activeToast, setActiveToast] = useState<string | null>(null);
@@ -485,9 +460,9 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Real database bootstrapping from Supabase PostgreSQL via /api/bootstrap
   const [isLoadingBootstrap, setIsLoadingBootstrap] = useState<boolean>(true);
 
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (showLoading = true) => {
     try {
-      setIsLoadingBootstrap(true);
+      if (showLoading) setIsLoadingBootstrap(true);
       const res = await fetch('/api/bootstrap');
       const json = await res.json();
       if (json.success && json.data) {
@@ -504,6 +479,20 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (json.data.warranties && json.data.warranties.length > 0) setWarranties(json.data.warranties);
         if (json.data.serials && json.data.serials.length > 0) setSerials(json.data.serials);
         if (json.data.approvalRequests && json.data.approvalRequests.length > 0) setApprovalRequests(json.data.approvalRequests);
+        if (json.data.stocktakes && json.data.stocktakes.length > 0) setStocktakes(json.data.stocktakes);
+        if (json.data.transfers && json.data.transfers.length > 0) setTransfers(json.data.transfers);
+        if (json.data.warehouses && json.data.warehouses.length > 0) {
+          setWarehouses(json.data.warehouses);
+          setActiveWarehouseState(prev => prev || json.data.warehouses.find((w: any) => w.isDefault) || json.data.warehouses[0]);
+        }
+        if (json.data.branches && json.data.branches.length > 0) {
+          setBranches(json.data.branches);
+          setActiveBranchState(prev => prev || json.data.branches[0]);
+        }
+        if (json.data.stockBalances && json.data.stockBalances.length > 0) {
+          setStockBalances(json.data.stockBalances);
+        }
+        setCachedData('bootstrap_snapshot', json.data);
       }
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu từ PostgreSQL Supabase:', err);
@@ -513,8 +502,55 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
-    refreshData();
+    // Instant cache read for 0ms cold start (Stale-While-Revalidate)
+    getCachedData<any>('bootstrap_snapshot')
+      .then(cached => {
+        if (cached) {
+          if (cached.products?.length) setProducts(cached.products);
+          if (cached.customers?.length) setCustomers(cached.customers);
+          if (cached.orders?.length) setOrders(cached.orders);
+          if (cached.shifts?.length) setShifts(cached.shifts);
+          if (cached.transactions?.length) setTransactions(cached.transactions);
+          if (cached.employees?.length) setEmployees(cached.employees);
+          if (cached.suppliers?.length) setSuppliers(cached.suppliers);
+          if (cached.inbounds?.length) setInbounds(cached.inbounds);
+          if (cached.outbounds?.length) setOutbounds(cached.outbounds);
+          if (cached.returns?.length) setReturns(cached.returns);
+          if (cached.warranties?.length) setWarranties(cached.warranties);
+          if (cached.serials?.length) setSerials(cached.serials);
+          if (cached.approvalRequests?.length) setApprovalRequests(cached.approvalRequests);
+          if (cached.stocktakes?.length) setStocktakes(cached.stocktakes);
+          if (cached.transfers?.length) setTransfers(cached.transfers);
+          if (cached.warehouses?.length) {
+            setWarehouses(cached.warehouses);
+            setActiveWarehouseState(prev => prev || cached.warehouses.find((w: any) => w.isDefault) || cached.warehouses[0]);
+          }
+          if (cached.branches?.length) {
+            setBranches(cached.branches);
+            setActiveBranchState(prev => prev || cached.branches[0]);
+          }
+          if (cached.stockBalances?.length) setStockBalances(cached.stockBalances);
+          // Immediately set loading to false since we already have cached snapshot
+          setIsLoadingBootstrap(false);
+          // Silently revalidate in the background
+          refreshData(false);
+        } else {
+          refreshData(true);
+        }
+      })
+      .catch(() => {
+        refreshData(true);
+      });
   }, [refreshData]);
+
+  // Save to LocalStorage on changes
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}transfers`, JSON.stringify(transfers));
+  }, [transfers]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}stocktakes`, JSON.stringify(stocktakes));
+  }, [stocktakes]);
 
   // Save to LocalStorage on changes
   useEffect(() => {
@@ -540,6 +576,10 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem(`${STORAGE_PREFIX}customers`, JSON.stringify(customers));
   }, [customers]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_PREFIX}batches`, JSON.stringify(batches));
+  }, [batches]);
 
   useEffect(() => {
     localStorage.setItem(`${STORAGE_PREFIX}orders`, JSON.stringify(orders));
@@ -1288,11 +1328,34 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newReport: StocktakeReport = {
       ...reportData,
       id: `stocktake-${Date.now()}`,
-      code: `KK-${dateStr}-${counter}`
+      code: `PKK-${dateStr}-${counter}`
     };
 
+    // 1. Immediately update products actual stock
+    setProducts(prev =>
+      prev.map(p => {
+        const matched = newReport.items.find(i => i.productId === p.id);
+        if (matched && typeof matched.actualStock === 'number') {
+          return {
+            ...p,
+            stockBaseUnits: matched.actualStock
+          };
+        }
+        return p;
+      })
+    );
+
+    // 2. Add to stocktake reports
     setStocktakes(prev => [newReport, ...prev]);
-    showToast(`📋 Đã lưu biên bản kiểm kê kho ${newReport.code}`);
+
+    // 3. Persist to PostgreSQL database via API
+    fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stocktake', ...reportData }),
+    }).catch(err => console.error('Error saving stocktake report to DB:', err));
+
+    showToast(`📋 Đã lưu & cân bằng số liệu kiểm kê kho ${newReport.code}`);
   };
 
   const reconcileStocktake = (items: { productId: string; actualStock: number }[]) => {
@@ -1310,6 +1373,200 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     showToast('⚖️ Đã cân bằng số lượng tồn kho theo số liệu thực tế kiểm kê!');
   };
+
+  // Warehouse Transfer Operations (Chuyển kho nội bộ)
+  const addWarehouseTransfer = (transferData: Omit<WarehouseTransfer, 'id' | 'code'>) => {
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const counter = Math.floor(100 + Math.random() * 900);
+    const newTransfer: WarehouseTransfer = {
+      ...transferData,
+      id: `tr-${Date.now()}`,
+      code: `CK-${dateStr}-${counter}`,
+      status: transferData.status || 'in_transit',
+      shippedAt: new Date().toISOString().slice(0, 16).replace('T', ' ')
+    };
+
+    // Deduct stock from source products
+    setProducts(prevProducts =>
+      prevProducts.map(prod => {
+        const trItem = newTransfer.items.find(i => i.productId === prod.id);
+        if (trItem) {
+          const deductBaseQty = trItem.quantity * trItem.conversionRate;
+          return {
+            ...prod,
+            stockBaseUnits: Math.max(0, prod.stockBaseUnits - deductBaseQty)
+          };
+        }
+        return prod;
+      })
+    );
+
+    setTransfers(prev => [newTransfer, ...prev]);
+
+    fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'transfer', ...transferData }),
+    }).catch(err => console.error('Error saving transfer to DB:', err));
+
+    showToast(`🚚 Đã tạo phiếu chuyển kho ${newTransfer.code} thành công!`);
+  };
+
+  const updateTransferStatus = (transferId: string, status: WarehouseTransfer['status'], receiverName?: string) => {
+    const nowStr = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    setTransfers(prev =>
+      prev.map(t => {
+        if (t.id === transferId) {
+          return {
+            ...t,
+            status,
+            receiverName: receiverName || t.receiverName,
+            receivedAt: status === 'completed' ? nowStr : t.receivedAt,
+            shippedAt: status === 'in_transit' ? nowStr : t.shippedAt
+          };
+        }
+        return t;
+      })
+    );
+
+    fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_transfer_status', transferId, status, receiverName }),
+    }).catch(err => console.error('Error updating transfer status:', err));
+
+    showToast(`✅ Đã cập nhật trạng thái phiếu chuyển kho sang "${status === 'completed' ? 'Đã nhận kho' : status === 'in_transit' ? 'Đang vận chuyển' : status}"`);
+  };
+
+  const addBatch = (batchData: ProductBatch) => {
+    setBatches(prev => [batchData, ...prev]);
+    fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'batch', ...batchData }),
+    }).catch(err => console.error('Error saving batch to DB:', err));
+    showToast(`🏷️ Đã tạo lô sản xuất ${batchData.batchId} thành công!`);
+  };
+
+  // Master Kho & Chi Nhánh Operations
+  const setActiveWarehouse = (wh: Warehouse) => {
+    setActiveWarehouseState(wh);
+    showToast(`🏢 Đã chuyển kho làm việc: ${wh.name}`);
+  };
+
+  const setActiveBranch = (br: Branch) => {
+    setActiveBranchState(br);
+    showToast(`🏪 Đã chọn chi nhánh: ${br.name}`);
+  };
+
+  const addWarehouse = async (whData: Partial<Warehouse>): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/warehouses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(whData),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setWarehouses(prev => [...prev, json.data]);
+        showToast(`✅ Đã tạo kho mới: ${json.data.name}`);
+        return true;
+      }
+      showToast(`⚠️ Lỗi tạo kho: ${json.error || 'Vui lòng thử lại'}`);
+      return false;
+    } catch (err) {
+      console.error('addWarehouse error:', err);
+      return false;
+    }
+  };
+
+  const addBranch = async (brData: Partial<Branch>): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/branches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(brData),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setBranches(prev => [...prev, json.data]);
+        showToast(`✅ Đã tạo chi nhánh: ${json.data.name}`);
+        return true;
+      }
+      showToast(`⚠️ Lỗi tạo chi nhánh: ${json.error || 'Vui lòng thử lại'}`);
+      return false;
+    } catch (err) {
+      console.error('addBranch error:', err);
+      return false;
+    }
+  };
+
+  // Sổ Thẻ Kho & Số Dư Tồn Kho
+  const fetchStockLedger = async (params?: { productId?: string; warehouseId?: string }) => {
+    try {
+      const url = new URL('/api/inventory/ledger', window.location.origin);
+      if (params?.productId) url.searchParams.set('productId', params.productId);
+      if (params?.warehouseId) url.searchParams.set('warehouseId', params.warehouseId);
+      const res = await fetch(url.toString());
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data?.ledgers) {
+          setStockLedgers(json.data.ledgers);
+        }
+      }
+    } catch (err) {
+      console.error('fetchStockLedger error:', err);
+    }
+  };
+
+  const fetchStockBalances = async (warehouseId?: string) => {
+    try {
+      const url = new URL('/api/inventory/balances', window.location.origin);
+      if (warehouseId) url.searchParams.set('warehouseId', warehouseId);
+      const res = await fetch(url.toString());
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setStockBalances(json.data);
+        }
+      }
+    } catch (err) {
+      console.error('fetchStockBalances error:', err);
+    }
+  };
+
+  // Stock Alerts & Reorder Calculations (Cảnh báo tồn kho & Đề xuất nhập hàng)
+  const lowStockAlerts: StockAlertItem[] = React.useMemo(() => {
+    return products
+      .filter(p => p.stockBaseUnits <= p.minStockAlert)
+      .map(p => {
+        const threshold = p.minStockAlert;
+        const current = p.stockBaseUnits;
+        const status: 'out_of_stock' | 'critical' | 'low' =
+          current <= 0 ? 'out_of_stock' : current <= Math.floor(threshold / 2) ? 'critical' : 'low';
+        const suggested = Math.max(threshold * 2 - current, 5);
+        return {
+          productId: p.id,
+          productName: p.name,
+          sku: p.sku,
+          category: p.category,
+          baseUnit: p.baseUnit,
+          currentStock: current,
+          minStockAlert: threshold,
+          status,
+          suggestedReorderQuantity: suggested,
+          costPrice: p.costPrice,
+          estimatedReorderCost: suggested * p.costPrice
+        };
+      });
+  }, [products]);
+
+  const reorderRecommendations = React.useMemo(() => {
+    return [...lowStockAlerts].sort((a, b) => {
+      const priority = { out_of_stock: 0, critical: 1, low: 2 };
+      return priority[a.status] - priority[b.status];
+    });
+  }, [lowStockAlerts]);
 
   // Return & Refund Management Functions (Quản lý đổi trả hàng)
   const addReturnReceipt = (receiptData: Omit<ReturnReceipt, 'id' | 'code'>) => {
@@ -2149,11 +2406,15 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Add order to orders list
     setOrders(prev => [newOrder, ...prev]);
 
-    // Persist order to PostgreSQL
+    // Persist order to PostgreSQL with effective warehouse and branch
     fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newOrder),
+      body: JSON.stringify({
+        ...newOrder,
+        warehouseId: activeWarehouse?.id,
+        branchId: activeWarehouse?.branchId || activeBranch?.id,
+      }),
     })
       .then(res => res.json())
       .then(resData => {
@@ -2161,6 +2422,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setOrders(prev =>
             prev.map(o => (o.id === newOrder.id ? { ...o, id: resData.data.id, code: resData.data.code } : o))
           );
+          fetchStockBalances();
         }
       })
       .catch(err => console.error('Error persisting order to DB:', err));
@@ -2867,10 +3129,28 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         inbounds,
         outbounds,
         stocktakes,
+        transfers,
         addInboundReceipt,
         addOutboundReceipt,
         addStocktakeReport,
         reconcileStocktake,
+        addWarehouseTransfer,
+        updateTransferStatus,
+        addBatch,
+        warehouses,
+        branches,
+        activeWarehouse,
+        activeBranch,
+        setActiveWarehouse,
+        setActiveBranch,
+        addWarehouse,
+        addBranch,
+        stockBalances,
+        stockLedgers,
+        fetchStockLedger,
+        fetchStockBalances,
+        lowStockAlerts,
+        reorderRecommendations,
         returns,
         addReturnReceipt,
         tabs,

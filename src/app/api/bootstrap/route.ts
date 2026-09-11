@@ -20,6 +20,11 @@ export async function GET() {
       outbounds,
       returns,
       approvalRequests,
+      stocktakes,
+      transfers,
+      warehouses,
+      branches,
+      stockBalances,
     ] = await Promise.all([
       prisma.product.findMany({
         where: { isActive: true },
@@ -66,6 +71,26 @@ export async function GET() {
       prisma.creditApprovalRequest.findMany({
         orderBy: { createdAt: "desc" },
       }),
+      prisma.stocktakeReport.findMany({
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.warehouseTransfer.findMany({
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.warehouse.findMany({
+        where: { isActive: true },
+        include: { branch: true },
+        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      }),
+      prisma.branch.findMany({
+        where: { isActive: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.stockBalance.findMany({
+        include: {
+          warehouse: { select: { id: true, code: true, name: true, isDefault: true } },
+        },
+      }),
     ]);
 
     // Format customers with nested debtAging object matching frontend types
@@ -96,6 +121,11 @@ export async function GET() {
         outbounds,
         returns,
         approvalRequests,
+        stocktakes,
+        transfers,
+        warehouses,
+        branches,
+        stockBalances,
       },
     });
   } catch (error) {

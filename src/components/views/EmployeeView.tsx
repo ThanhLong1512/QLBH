@@ -32,7 +32,16 @@ import {
 } from 'lucide-react';
 
 export const EmployeeView: React.FC = () => {
-  const { employees, addEmployee, updateEmployee, deleteEmployee, canExportExcel, showToast } = useERP();
+  const {
+    employees,
+    addEmployee,
+    updateEmployee,
+    deleteEmployee,
+    canExportExcel,
+    showToast,
+    branches,
+    warehouses
+  } = useERP();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -55,6 +64,8 @@ export const EmployeeView: React.FC = () => {
     role: 'cashier' as EmployeeRole,
     roleTitle: 'Thu Ngân Ca Sáng',
     branch: 'Chi nhánh Quận 1 (Trần Hưng Đạo)',
+    branchId: '',
+    warehouseId: '',
     status: 'active' as 'active' | 'inactive',
     hireDate: new Date().toISOString().slice(0, 10),
     baseSalary: 10000000,
@@ -145,6 +156,7 @@ export const EmployeeView: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditingEmployee(null);
+    const defaultBranch = branches[0];
     setFormData({
       code: `NV-${String(employees.length + 1).padStart(3, '0')}`,
       name: '',
@@ -152,7 +164,9 @@ export const EmployeeView: React.FC = () => {
       email: '',
       role: 'cashier',
       roleTitle: 'Nhân Viên Thu Ngân',
-      branch: 'Chi nhánh Quận 1 (Trần Hưng Đạo)',
+      branch: defaultBranch?.name || 'Trụ sở chính & Kho Tổng',
+      branchId: defaultBranch?.id || '',
+      warehouseId: '',
       status: 'active',
       hireDate: new Date().toISOString().slice(0, 10),
       baseSalary: 10000000,
@@ -173,6 +187,8 @@ export const EmployeeView: React.FC = () => {
       role: emp.role,
       roleTitle: emp.roleTitle,
       branch: emp.branch,
+      branchId: emp.branchId || '',
+      warehouseId: emp.warehouseId || '',
       status: emp.status,
       hireDate: emp.hireDate,
       baseSalary: emp.baseSalary,
@@ -199,6 +215,9 @@ export const EmployeeView: React.FC = () => {
       role: formData.role,
       roleTitle: formData.roleTitle.trim(),
       branch: formData.branch.trim(),
+      branchId: formData.branchId || null,
+      warehouseId: formData.warehouseId || null,
+      userId: editingEmployee ? editingEmployee.userId : null,
       status: formData.status,
       hireDate: formData.hireDate,
       baseSalary: Number(formData.baseSalary) || 0,
@@ -476,12 +495,24 @@ export const EmployeeView: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Branch */}
+                      {/* Branch & User Account */}
                       <td className="py-3 px-4">
-                        <span className="text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1">
-                          <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          {emp.branch}
-                        </span>
+                        <div className="space-y-1">
+                          <span className="text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1 font-medium">
+                            <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            {emp.branch}
+                          </span>
+                          {emp.userId ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-200 dark:border-emerald-800">
+                              <Shield className="w-2.5 h-2.5" />
+                              Tài khoản đăng nhập
+                            </span>
+                          ) : (
+                            <span className="inline-block text-[10px] text-slate-400">
+                              Chưa cấp tài khoản
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Contact */}
@@ -697,30 +728,58 @@ export const EmployeeView: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Chi Nhánh / Địa Điểm
+                    Chi Nhánh Trực Thuộc *
                   </label>
-                  <input
-                    type="text"
-                    value={formData.branch}
-                    onChange={e => setFormData({ ...formData, branch: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                    placeholder="VD: Chi nhánh Quận 1 (Trần Hưng Đạo)"
-                  />
+                  <select
+                    value={formData.branchId || ''}
+                    onChange={e => {
+                      const selectedBr = branches.find(b => b.id === e.target.value);
+                      setFormData({
+                        ...formData,
+                        branchId: e.target.value,
+                        branch: selectedBr ? selectedBr.name : formData.branch
+                      });
+                    }}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  >
+                    <option value="">-- Chọn Chi Nhánh --</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Trạng Thái Hoạt Động
+                    Kho Hàng Trực Thuộc
                   </label>
                   <select
-                    value={formData.status}
-                    onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                    value={formData.warehouseId || ''}
+                    onChange={e => setFormData({ ...formData, warehouseId: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
                   >
-                    <option value="active">Đang làm việc</option>
-                    <option value="inactive">Tạm ngưng / Nghỉ việc</option>
+                    <option value="">-- Tất cả kho hoặc không cố định --</option>
+                    {warehouses
+                      .filter(w => !formData.branchId || w.branchId === formData.branchId)
+                      .map(w => (
+                        <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                      ))}
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Trạng Thái Hoạt Động
+                </label>
+                <select
+                  value={formData.status}
+                  onChange={e => setFormData({ ...formData, status: e.target.value as any })}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                >
+                  <option value="active">Đang làm việc</option>
+                  <option value="inactive">Tạm ngưng / Nghỉ việc</option>
+                </select>
               </div>
 
               {/* Compensation */}
