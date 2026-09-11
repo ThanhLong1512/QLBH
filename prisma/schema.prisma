@@ -45,6 +45,30 @@ model Product {
   @@map("products")
 }
 
+model ProductCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String?  @unique
+  description String?
+  color       String?  @default("indigo")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("product_categories")
+}
+
+model UnitOfMeasure {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String?  @unique
+  description String?
+  type        String   @default("base") // "base" (Đơn vị cơ bản) hoặc "packaging" (Đơn vị quy đổi/đóng gói)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("units_of_measure")
+}
+
 model PackagingUnit {
   id              String   @id @default(uuid())
   productId       String
@@ -435,3 +459,26 @@ model SystemSetting {
 
   @@map("system_settings")
 }
+
+// ---------------------------------------------------------
+// 10. NGƯỜI DÙNG & XÁC THỰC (Users & Authentication)
+// ---------------------------------------------------------
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String
+  phone         String?
+  password      String    // Salted hash of password
+  role          String    @default("admin") // "admin", "manager", "cashier", "warehouse", "accountant"
+  roleTitle     String    @default("Quản Trị Viên")
+  businessName  String?
+  businessScale String?
+  avatar        String?
+  status        String    @default("active") // "active", "inactive"
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("users")
+}
+

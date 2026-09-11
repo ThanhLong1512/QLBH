@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import {
@@ -73,7 +73,7 @@ export const SettingsView: React.FC = () => {
   ];
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 sm:space-y-8 max-w-5xl mx-auto animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
+    <div className="p-6 space-y-6 w-full animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
       <div>
         <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
           <Settings className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />

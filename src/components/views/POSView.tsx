@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Product, CartItem, TierPriceType } from '../../types/erp';
 import { Pagination } from '../common/Pagination';
+import { MoneyInput } from '../common/MoneyInput';
 import {
   Plus,
   X,
@@ -648,22 +649,22 @@ export const POSView: React.FC = () => {
                       </div>
 
                       {/* Price input / display */}
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
+                      <div className="flex items-center gap-1.5 w-24">
+                        <MoneyInput
                           value={item.unitPrice}
-                          onChange={(e) =>
+                          onChange={(val) =>
                             updateCartItemPrice(
                               activeTab.id,
                               item.productId,
                               item.selectedUnit,
-                              parseFloat(e.target.value) || 0,
+                              val,
                               item.discountPercent
                             )
                           }
-                          className="w-24 text-right rounded-md bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-xs font-mono text-slate-900 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
+                          suffix=""
+                          className="w-full bg-transparent text-right text-xs font-mono font-bold text-slate-800 dark:text-slate-200 focus:outline-none border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700"
                         />
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400">đ</span>
+                        <span className="text-[11px] text-slate-400">đ</span>
                       </div>
 
                       {/* Line total */}
@@ -699,23 +700,27 @@ export const POSView: React.FC = () => {
               </div>
               <div className="flex justify-between text-slate-500 dark:text-slate-400 items-center">
                 <span>Chiết khấu:</span>
-                <input
-                  type="number"
-                  value={activeTab.discountAmount}
-                  onChange={(e) => setTabDiscount(activeTab.id, parseFloat(e.target.value) || 0)}
-                  placeholder="0"
-                  className="w-24 text-right bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-1.5 py-0.5 text-xs font-mono text-slate-900 dark:text-slate-200 focus:outline-none"
-                />
+                <div className="w-28">
+                  <MoneyInput
+                    value={activeTab.discountAmount}
+                    onChange={(val) => setTabDiscount(activeTab.id, val)}
+                    placeholder="0"
+                    suffix="đ"
+                    className="w-full text-right bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-1.5 py-0.5 text-xs font-mono text-slate-900 dark:text-slate-200 focus:outline-none"
+                  />
+                </div>
               </div>
               <div className="flex justify-between text-slate-500 dark:text-slate-400 items-center">
                 <span>Phí giao hàng:</span>
-                <input
-                  type="number"
-                  value={activeTab.shippingFee}
-                  onChange={(e) => setTabShipping(activeTab.id, parseFloat(e.target.value) || 0)}
-                  placeholder="0"
-                  className="w-24 text-right bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-1.5 py-0.5 text-xs font-mono text-slate-900 dark:text-slate-200 focus:outline-none"
-                />
+                <div className="w-28">
+                  <MoneyInput
+                    value={activeTab.shippingFee}
+                    onChange={(val) => setTabShipping(activeTab.id, val)}
+                    placeholder="0"
+                    suffix="đ"
+                    className="w-full text-right bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded px-1.5 py-0.5 text-xs font-mono text-slate-900 dark:text-slate-200 focus:outline-none"
+                  />
+                </div>
               </div>
               <div className="flex justify-between text-sm font-bold text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-slate-800">
                 <span>TỔNG CỘNG:</span>
@@ -729,12 +734,14 @@ export const POSView: React.FC = () => {
             <div className="space-y-1.5 pt-1 border-t border-slate-200 dark:border-slate-800/80">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-700 dark:text-slate-300 font-medium">Khách thanh toán:</span>
-                <input
-                  type="number"
-                  value={activeTab.paidAmount}
-                  onChange={(e) => setTabPaidAmount(activeTab.id, parseFloat(e.target.value) || 0)}
-                  className="w-32 text-right bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-emerald-500"
-                />
+                <div className="w-36">
+                  <MoneyInput
+                    value={activeTab.paidAmount}
+                    onChange={(val) => setTabPaidAmount(activeTab.id, val)}
+                    suffix="đ"
+                    className="w-full text-right bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
               </div>
 
               {/* Quick Cash Chips */}

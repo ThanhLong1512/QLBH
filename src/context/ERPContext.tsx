@@ -3,6 +3,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import {
   UserRole,
   AuthUser,
+  PermissionKey,
+  ROLE_PERMISSIONS,
+  ROLE_CONFIG,
   Product,
   Customer,
   ProductBatch,
@@ -22,7 +25,10 @@ import {
   StocktakeReport,
   ReturnReceipt,
   WarrantyTicket,
-  WarrantyServiceRecord
+  WarrantyServiceRecord,
+  ChatMessage,
+  ChatAttachment,
+  ChatChannel
 } from '../types/erp';
 import {
   INITIAL_PRODUCTS,
@@ -73,15 +79,16 @@ interface ERPContextType {
   role: UserRole;
   setRole: (role: UserRole) => void;
   toggleRole: () => void;
+  hasPermission: (permission: PermissionKey) => boolean;
   canViewCosts: boolean;
   canExportExcel: boolean;
 
   // Authentication & Current User
   currentUser: AuthUser | null;
   isAuthenticated: boolean;
-  login: (email: string, pass: string, targetRole?: UserRole) => boolean;
+  login: (email: string, pass: string, targetRole?: UserRole) => Promise<boolean>;
   logout: () => void;
-  register: (data: { name: string; email: string; phone: string; businessName: string; password: string; businessScale: string; role?: UserRole }) => boolean;
+  register: (data: { name: string; email: string; phone: string; businessName: string; password: string; businessScale: string; role?: UserRole }) => Promise<boolean>;
   resetPassword: (email: string, newPass: string) => boolean;
 
   // Products & Warehouse
@@ -216,6 +223,17 @@ interface ERPContextType {
   resetAllData: () => void;
   activeToast: string | null;
   showToast: (msg: string) => void;
+
+  // Internal Chatbox
+  chatMessages: ChatMessage[];
+  sendChatMessage: (channelId: string, content: string, tag?: string, attachments?: ChatAttachment[]) => void;
+  addMessageReaction: (messageId: string, emoji: string) => void;
+  unreadChatCount: number;
+  markChannelAsRead: (channelId: string) => void;
+  isChatOpen: boolean;
+  setIsChatOpen: (open: boolean) => void;
+  activeChatChannelId: string;
+  setActiveChatChannelId: (channelId: string) => void;
 }
 
 const ERPContext = createContext<ERPContextType | null>(null);
@@ -275,25 +293,58 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [theme]);
 
-  // Default Demo Users for NEXUS ERP
-  const DEFAULT_ADMIN_USER: AuthUser = {
-    id: 'usr_admin_01',
-    name: 'Trần Hoàng Nam',
-    email: 'admin@nexus-erp.vn',
-    phone: '0918 234 889',
-    role: 'admin',
-    businessName: 'Tập Đoàn Bán Lẻ & Phân Phối NEXUS',
-    businessScale: 'Chuỗi 10+ Chi Nhánh & Kho Tổng'
-  };
-
-  const DEFAULT_CASHIER_USER: AuthUser = {
-    id: 'usr_cashier_02',
-    name: 'Nguyễn Văn Hùng',
-    email: 'thungan@nexus-erp.vn',
-    phone: '0987 654 321',
-    role: 'cashier',
-    businessName: 'Tập Đoàn Bán Lẻ & Phân Phối NEXUS',
-    businessScale: 'Chuỗi 10+ Chi Nhánh & Kho Tổng'
+  // Default Demo Users for NEXUS ERP (All 5 Roles)
+  const DEFAULT_USERS: Record<UserRole, AuthUser> = {
+    admin: {
+      id: 'usr_admin_01',
+      name: 'Trần Hoàng Nam',
+      email: 'admin@nexus-erp.vn',
+      phone: '0918 234 889',
+      role: 'admin',
+      roleTitle: 'Tổng Quản Trị Hệ Thống',
+      businessName: 'Tập Đoàn Bán Lẻ & Phân Phối NEXUS',
+      businessScale: 'Chuỗi 10+ Chi Nhánh & Kho Tổng',
+    },
+    manager: {
+      id: 'usr_manager_01',
+      name: 'Trần Đình Trọng',
+      email: 'quanly@nexus-erp.vn',
+      phone: '0966 334 455',
+      role: 'manager',
+      roleTitle: 'Cửa Hàng Trưởng / Quản Lý',
+      businessName: 'Tập Đoàn Bán Lẻ & Phân Phối NEXUS',
+      businessScale: 'Chi Nhánh Trung Tâm Quận 1',
+    },
+    cashier: {
+      id: 'usr_cashier_02',
+      name: 'Nguyễn Văn Hùng',
+      email: 'thungan@nexus-erp.vn',
+      phone: '0903 112 334',
+      role: 'cashier',
+      roleTitle: 'Nhân Viên Thu Ngân POS',
+      businessName: 'Tập Đoàn Bán Lẻ & Phân Phối NEXUS',
+      businessScale: 'Chi Nhánh Trung Tâm Quận 1',
+    },
+    warehouse: {
+      id: 'usr_warehouse_01',
+      name: 'Lê Minh Tuấn',
+      email: 'thukho@nexus-erp.vn',
+      phone: '0938 556 778',
+      role: 'warehouse',
+      roleTitle: 'Thủ Kho & Vận Hành',
+      businessName: 'Tập Đoàn Bán Lẻ & Phân Phối NEXUS',
+      businessScale: 'Kho Tổng Trung Tâm KCN Tân Bình',
+    },
+    accountant: {
+      id: 'usr_accountant_01',
+      name: 'Phan Thị Hà',
+      email: 'ketoan@nexus-erp.vn',
+      phone: '0982 667 890',
+      role: 'accountant',
+      roleTitle: 'Kế Toán Trưởng & Công Nợ',
+      businessName: 'Tập Đoàn Bán Lẻ & Phân Phối NEXUS',
+      businessScale: 'Trụ sở & Kho Tổng Bình Tân',
+    },
   };
 
   // Role
@@ -304,7 +355,15 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Authentication & Current User
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     const saved = localStorage.getItem(`${STORAGE_PREFIX}auth_user`);
-    return saved ? JSON.parse(saved) : DEFAULT_ADMIN_USER;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // ignore error
+      }
+    }
+    const savedRole = (localStorage.getItem(`${STORAGE_PREFIX}role`) as UserRole) || 'admin';
+    return DEFAULT_USERS[savedRole] || DEFAULT_USERS.admin;
   });
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -622,33 +681,83 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     onDetected: () => {}
   });
 
+  const ALL_ROLES: UserRole[] = ['admin', 'manager', 'cashier', 'warehouse', 'accountant'];
+
+  const setRole = (newRole: UserRole) => {
+    setRoleState(newRole);
+    const fallbackUser = DEFAULT_USERS[newRole] || DEFAULT_USERS.admin;
+    const updatedUser: AuthUser = {
+      ...(currentUser || fallbackUser),
+      role: newRole,
+      roleTitle: ROLE_CONFIG[newRole]?.title || newRole,
+    };
+    setCurrentUser(updatedUser);
+    localStorage.setItem(`${STORAGE_PREFIX}auth_user`, JSON.stringify(updatedUser));
+    localStorage.setItem(`${STORAGE_PREFIX}role`, newRole);
+    showToast(`🔓 Đã chuyển vai trò: ${ROLE_CONFIG[newRole]?.label || newRole}`);
+  };
+
   const toggleRole = () => {
-    setRoleState(prev => {
-      const next = prev === 'admin' ? 'cashier' : 'admin';
-      const updatedUser = next === 'admin' ? DEFAULT_ADMIN_USER : DEFAULT_CASHIER_USER;
-      setCurrentUser(updatedUser);
-      localStorage.setItem(`${STORAGE_PREFIX}auth_user`, JSON.stringify(updatedUser));
-      showToast(next === 'admin' ? '🔓 Đã chuyển sang vai trò: QUẢN TRỊ VIÊN (Xem toàn bộ giá vốn & báo cáo)' : '🔒 Đã chuyển sang vai trò: THU NGÂN (Đã ẩn giá vốn & giới hạn xuất dữ liệu)');
-      return next;
-    });
+    // 1 người 1 role cố định - không cho phép chuyển đổi qua lại
+  };
+
+  const hasPermission = (permission: PermissionKey): boolean => {
+    // Quản trị viên (admin) toàn quyền sử dụng toàn bộ hệ thống
+    if (role === 'admin') return true;
+    const permissions = ROLE_PERMISSIONS[role] || [];
+    return permissions.includes(permission);
   };
 
   // Auth Operations
-  const login = (email: string, _pass: string, targetRole?: UserRole): boolean => {
-    const resolvedRole: UserRole = targetRole || (email.toLowerCase().includes('thungan') || email.toLowerCase().includes('cashier') ? 'cashier' : 'admin');
-    const baseUser = resolvedRole === 'cashier' ? DEFAULT_CASHIER_USER : DEFAULT_ADMIN_USER;
-    const user: AuthUser = {
-      ...baseUser,
-      email: email || baseUser.email
-    };
-    setCurrentUser(user);
-    setRoleState(resolvedRole);
-    setIsAuthenticated(true);
-    localStorage.setItem(`${STORAGE_PREFIX}auth_user`, JSON.stringify(user));
-    localStorage.setItem(`${STORAGE_PREFIX}is_auth`, 'true');
-    localStorage.setItem(`${STORAGE_PREFIX}role`, resolvedRole);
-    showToast(`Chào mừng ${user.name}! Đăng nhập thành công với vai trò ${resolvedRole === 'admin' ? 'Quản Trị Viên' : 'Thu Ngân'}.`);
-    return true;
+  const login = async (email: string, pass: string, targetRole?: UserRole): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass }),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        const user: AuthUser = {
+          id: json.data.id,
+          name: json.data.name,
+          email: json.data.email,
+          phone: json.data.phone || '',
+          role: json.data.role,
+          roleTitle: json.data.roleTitle || ROLE_CONFIG[json.data.role as UserRole]?.title,
+          businessName: json.data.businessName || 'Tập Đoàn Bán Lẻ & Phân Phối NEXUS',
+          businessScale: json.data.businessScale,
+        };
+        setCurrentUser(user);
+        setRoleState(user.role);
+        setIsAuthenticated(true);
+        localStorage.setItem(`${STORAGE_PREFIX}auth_user`, JSON.stringify(user));
+        localStorage.setItem(`${STORAGE_PREFIX}is_auth`, 'true');
+        localStorage.setItem(`${STORAGE_PREFIX}role`, user.role);
+        showToast(`🎉 Đăng nhập thành công! Chào mừng ${user.name} (${user.roleTitle || user.role}).`);
+        return true;
+      } else {
+        showToast(`⚠️ Đăng nhập thất bại: ${json.error || 'Vui lòng kiểm tra lại thông tin'}`);
+        return false;
+      }
+    } catch (err) {
+      console.error('Login fetch error:', err);
+      // Fallback for offline demo mode if API is unreachable
+      const resolvedRole: UserRole = targetRole || (email.toLowerCase().includes('thungan') || email.toLowerCase().includes('cashier') ? 'cashier' : 'admin');
+      const baseUser = DEFAULT_USERS[resolvedRole] || DEFAULT_USERS.admin;
+      const user: AuthUser = {
+        ...baseUser,
+        email: email || baseUser.email
+      };
+      setCurrentUser(user);
+      setRoleState(resolvedRole);
+      setIsAuthenticated(true);
+      localStorage.setItem(`${STORAGE_PREFIX}auth_user`, JSON.stringify(user));
+      localStorage.setItem(`${STORAGE_PREFIX}is_auth`, 'true');
+      localStorage.setItem(`${STORAGE_PREFIX}role`, resolvedRole);
+      showToast(`🎉 Đăng nhập thành công (Chế độ ngoại tuyến)! Chào mừng ${user.name}.`);
+      return true;
+    }
   };
 
   const logout = () => {
@@ -657,25 +766,42 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Đã đăng xuất an toàn khỏi hệ thống NEXUS ERP.');
   };
 
-  const register = (data: { name: string; email: string; phone: string; businessName: string; password: string; businessScale: string; role?: UserRole }): boolean => {
-    const userRole: UserRole = data.role || 'admin';
-    const newUser: AuthUser = {
-      id: `usr_${Date.now()}`,
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      role: userRole,
-      businessName: data.businessName,
-      businessScale: data.businessScale
-    };
-    setCurrentUser(newUser);
-    setRoleState(userRole);
-    setIsAuthenticated(true);
-    localStorage.setItem(`${STORAGE_PREFIX}auth_user`, JSON.stringify(newUser));
-    localStorage.setItem(`${STORAGE_PREFIX}is_auth`, 'true');
-    localStorage.setItem(`${STORAGE_PREFIX}role`, userRole);
-    showToast(`Khởi tạo tài khoản thành công! Chào mừng ${newUser.businessName} gia nhập hệ sinh thái NEXUS.`);
-    return true;
+  const register = async (data: { name: string; email: string; phone: string; businessName: string; password: string; businessScale: string; role?: UserRole }): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        const user: AuthUser = {
+          id: json.data.id,
+          name: json.data.name,
+          email: json.data.email,
+          phone: json.data.phone || '',
+          role: json.data.role,
+          roleTitle: json.data.roleTitle || ROLE_CONFIG[json.data.role as UserRole]?.title,
+          businessName: json.data.businessName,
+          businessScale: json.data.businessScale,
+        };
+        setCurrentUser(user);
+        setRoleState(user.role);
+        setIsAuthenticated(true);
+        localStorage.setItem(`${STORAGE_PREFIX}auth_user`, JSON.stringify(user));
+        localStorage.setItem(`${STORAGE_PREFIX}is_auth`, 'true');
+        localStorage.setItem(`${STORAGE_PREFIX}role`, user.role);
+        showToast(`🎉 Khởi tạo tài khoản thành công và đã lưu DB! Chào mừng ${user.name} gia nhập NEXUS.`);
+        return true;
+      } else {
+        showToast(`⚠️ Đăng ký không thành công: ${json.error || 'Vui lòng kiểm tra lại'}`);
+        return false;
+      }
+    } catch (err) {
+      console.error('Register fetch error:', err);
+      showToast(`⚠️ Không thể kết nối tới máy chủ để lưu thông tin đăng ký.`);
+      return false;
+    }
   };
 
   const resetPassword = (email: string, _newPass: string): boolean => {
@@ -683,8 +809,8 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  const canViewCosts = role === 'admin';
-  const canExportExcel = role === 'admin';
+  const canViewCosts = hasPermission('view_cost_price');
+  const canExportExcel = hasPermission('export_data');
 
   // Telegram alert dispatcher
   const dispatchTelegramAlert = (type: TelegramAlert['type'], title: string, message: string) => {
@@ -2488,9 +2614,205 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setReturns(INITIAL_RETURNS);
     setSerials(INITIAL_SERIALS);
     setWarranties(INITIAL_WARRANTIES);
+    setChatMessages(INITIAL_CHAT_MESSAGES);
+    setReadMessageIds({});
+    localStorage.removeItem(`${STORAGE_PREFIX}chat_messages_v1`);
+    localStorage.removeItem(`${STORAGE_PREFIX}chat_read_ids`);
     setRoleState('admin');
     refreshData();
     showToast('🔄 Đã làm mới và đồng bộ dữ liệu từ Cơ sở dữ liệu!');
+  };
+
+  // INTERNAL CHATBOX SEED & STATE
+  const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
+    {
+      id: 'msg-seed-1',
+      channelId: 'general',
+      senderId: 'usr_admin_01',
+      senderName: 'Lê Thanh Long',
+      senderRole: 'admin',
+      content: 'Chào cả nhà! Sáng nay lô Tivi 4K và Tủ Lạnh đã nhập kho trung tâm đầy đủ, các bạn chuẩn bị lên đơn giao khách nhé! 🎉',
+      timestamp: '08:15',
+      reactions: { '👍': ['usr_cashier_01', 'usr_warehouse_01'], '🔥': ['usr_accountant_01'] },
+    },
+    {
+      id: 'msg-seed-2',
+      channelId: 'general',
+      senderId: 'usr_cashier_01',
+      senderName: 'Nguyễn Thị Mai',
+      senderRole: 'cashier',
+      content: 'Dạ sếp, khách sỉ Công ty Hoàng Kim vừa chốt 5 thùng nước ngọt và 2 tivi, em đang chuẩn bị xuất kho ạ.',
+      timestamp: '08:22',
+      reactions: { '✅': ['usr_admin_01'] },
+    },
+    {
+      id: 'msg-seed-3',
+      channelId: 'sales',
+      senderId: 'usr_cashier_01',
+      senderName: 'Nguyễn Thị Mai',
+      senderRole: 'cashier',
+      content: '@kho Anh Tuấn kiểm tra giúp em trong kho còn bao nhiêu cái Nồi Cơm Điện Cuckoo với ạ?',
+      tag: '@kho',
+      timestamp: '09:05',
+    },
+    {
+      id: 'msg-seed-4',
+      channelId: 'sales',
+      senderId: 'usr_warehouse_01',
+      senderName: 'Trần Văn Tuấn',
+      senderRole: 'warehouse',
+      content: 'Còn 18 cái nhé Mai ơi, vừa kiểm kê xong ở kệ B3.',
+      timestamp: '09:07',
+      reactions: { '👍': ['usr_cashier_01'] },
+    },
+    {
+      id: 'msg-seed-5',
+      channelId: 'warehouse',
+      senderId: 'usr_warehouse_01',
+      senderName: 'Trần Văn Tuấn',
+      senderRole: 'warehouse',
+      content: 'Đã hoàn tất nhập kho 50 thùng Dầu Nhớt Castrol từ Nhà cung cấp Castrol Việt Nam.',
+      timestamp: '09:30',
+      attachments: [
+        { type: 'product', title: 'Dầu Nhớt Castrol Power1', code: 'SP-004' },
+      ],
+    },
+    {
+      id: 'msg-seed-6',
+      channelId: 'finance',
+      senderId: 'usr_accountant_01',
+      senderName: 'Phan Thị Hà',
+      senderRole: 'accountant',
+      content: '@admin Báo cáo dòng tiền hôm nay ổn định, đã thu hồi 25.000.000 đ công nợ từ khách hàng thân thiết.',
+      tag: '@admin',
+      timestamp: '10:00',
+      reactions: { '👏': ['usr_admin_01'] },
+    },
+  ];
+
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const [activeChatChannelId, setActiveChatChannelId] = useState<string>('general');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}chat_messages_v1`);
+    return saved ? JSON.parse(saved) : INITIAL_CHAT_MESSAGES;
+  });
+  const [readMessageIds, setReadMessageIds] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}chat_read_ids`);
+    return saved
+      ? JSON.parse(saved)
+      : {
+          'msg-seed-1': true,
+          'msg-seed-2': true,
+          'msg-seed-3': true,
+          'msg-seed-4': true,
+          'msg-seed-5': true,
+          'msg-seed-6': true,
+        };
+  });
+
+  const unreadChatCount = chatMessages.filter(
+    (m) => m.senderId !== (currentUser?.id || 'usr_admin_01') && !readMessageIds[m.id]
+  ).length;
+
+  const markChannelAsRead = useCallback((channelId: string) => {
+    setReadMessageIds((prev) => {
+      const updated = { ...prev };
+      chatMessages
+        .filter((m) => m.channelId === channelId)
+        .forEach((m) => {
+          updated[m.id] = true;
+        });
+      localStorage.setItem(`${STORAGE_PREFIX}chat_read_ids`, JSON.stringify(updated));
+      return updated;
+    });
+  }, [chatMessages]);
+
+  const sendChatMessage = (
+    channelId: string,
+    content: string,
+    tag?: string,
+    attachments?: ChatAttachment[]
+  ) => {
+    const newMsg: ChatMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      channelId,
+      senderId: currentUser?.id || 'usr_admin_01',
+      senderName: currentUser?.name || 'Lê Thanh Long',
+      senderRole: role || 'admin',
+      senderAvatar: currentUser?.avatar,
+      content,
+      timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+      tag,
+      attachments,
+    };
+
+    setChatMessages((prev) => {
+      const updated = [...prev, newMsg];
+      localStorage.setItem(`${STORAGE_PREFIX}chat_messages_v1`, JSON.stringify(updated));
+      return updated;
+    });
+
+    setReadMessageIds((prev) => ({ ...prev, [newMsg.id]: true }));
+
+    // Colleague automated realistic reply simulation
+    const lower = content.toLowerCase();
+    if (tag === '@kho' || lower.includes('kho') || lower.includes('tồn') || lower.includes('hàng')) {
+      setTimeout(() => {
+        const reply: ChatMessage = {
+          id: `msg-${Date.now()}-reply`,
+          channelId,
+          senderId: 'usr_warehouse_01',
+          senderName: 'Trần Văn Tuấn (Thủ Kho)',
+          senderRole: 'warehouse',
+          content: 'Kho đã tiếp nhận yêu cầu và kiểm tra số lượng trên kệ thực tế ngay nhé! 📦👍',
+          timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+        };
+        setChatMessages((p) => {
+          const up = [...p, reply];
+          localStorage.setItem(`${STORAGE_PREFIX}chat_messages_v1`, JSON.stringify(up));
+          return up;
+        });
+        showToast('Thủ Kho Tuấn vừa phản hồi trong Kênh Chat!');
+      }, 2000);
+    } else if (tag === '@ketoan' || lower.includes('duyệt') || lower.includes('nợ') || lower.includes('chi') || lower.includes('thu')) {
+      setTimeout(() => {
+        const reply: ChatMessage = {
+          id: `msg-${Date.now()}-reply`,
+          channelId,
+          senderId: 'usr_accountant_01',
+          senderName: 'Phan Thị Hà (Kế Toán)',
+          senderRole: 'accountant',
+          content: 'Kế toán đã ghi nhận thông tin đối soát, hồ sơ hợp lệ nhé! 💳',
+          timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+        };
+        setChatMessages((p) => {
+          const up = [...p, reply];
+          localStorage.setItem(`${STORAGE_PREFIX}chat_messages_v1`, JSON.stringify(up));
+          return up;
+        });
+        showToast('Kế Toán Hà vừa phản hồi trong Kênh Chat!');
+      }, 2200);
+    }
+  };
+
+  const addMessageReaction = (messageId: string, emoji: string) => {
+    setChatMessages((prev) => {
+      const updated = prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const reactions = { ...(m.reactions || {}) };
+        const currentList = reactions[emoji] || [];
+        const myId = currentUser?.id || 'usr_admin_01';
+        if (currentList.includes(myId)) {
+          reactions[emoji] = currentList.filter((uid) => uid !== myId);
+          if (reactions[emoji].length === 0) delete reactions[emoji];
+        } else {
+          reactions[emoji] = [...currentList, myId];
+        }
+        return { ...m, reactions };
+      });
+      localStorage.setItem(`${STORAGE_PREFIX}chat_messages_v1`, JSON.stringify(updated));
+      return updated;
+    });
   };
 
   return (
@@ -2499,8 +2821,9 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         theme,
         toggleTheme,
         role,
-        setRole: setRoleState,
+        setRole,
         toggleRole,
+        hasPermission,
         canViewCosts,
         canExportExcel,
         currentUser,
@@ -2604,7 +2927,16 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setBankConfig,
         resetAllData,
         activeToast,
-        showToast
+        showToast,
+        chatMessages,
+        sendChatMessage,
+        addMessageReaction,
+        unreadChatCount,
+        markChannelAsRead,
+        isChatOpen,
+        setIsChatOpen,
+        activeChatChannelId,
+        setActiveChatChannelId
       }}
     >
       {children}

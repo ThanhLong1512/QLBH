@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { WarrantyTicket, WarrantyTicketStatus, WarrantyServiceRecord } from '../../types/erp';
 import { Pagination } from '../common/Pagination';
+import { MoneyInput } from '../common/MoneyInput';
 import {
   ShieldCheck,
   Wrench,
@@ -356,7 +357,7 @@ export const WarrantyView: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
+    <div className="p-6 space-y-6 w-full animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
       {/* HEADER & TOP BAR */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>
@@ -1144,13 +1145,11 @@ export const WarrantyView: React.FC = () => {
                       />
                     </div>
                     <div>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1000"
-                        value={newServiceCost || ''}
-                        onChange={(e) => setNewServiceCost(parseFloat(e.target.value) || 0)}
+                      <MoneyInput
+                        value={newServiceCost}
+                        onChange={(val) => setNewServiceCost(val)}
                         placeholder="Chi phí (VNĐ)"
+                        suffix="đ"
                         className="w-full rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-900 dark:text-white font-mono"
                       />
                     </div>

@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
+import { UserRole, ROLE_CONFIG } from '../../types/erp';
 import {
   Bell,
   ScanBarcode,
@@ -18,20 +19,26 @@ import {
   Radio,
   Volume2,
   LogOut,
-  KeyRound
+  KeyRound,
+  Store,
+  Warehouse,
+  Wallet,
+  Check,
+  MessageSquare,
+  Menu
 } from 'lucide-react';
 
 interface Props {
   activeView: string;
   setActiveView: (view: string) => void;
+  onToggleMobileMenu?: () => void;
 }
 
-export const Header: React.FC<Props> = ({ activeView, setActiveView }) => {
+export const Header: React.FC<Props> = ({ activeView, setActiveView, onToggleMobileMenu }) => {
   const {
     theme,
     toggleTheme,
     role,
-    toggleRole,
     canViewCosts,
     telegramAlerts,
     openScannerModal,
@@ -39,7 +46,10 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView }) => {
     orders,
     currentShift,
     currentUser,
-    logout
+    logout,
+    unreadChatCount,
+    isChatOpen,
+    setIsChatOpen
   } = useERP();
 
   const [showAlertsDropdown, setShowAlertsDropdown] = useState(false);
@@ -60,24 +70,38 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView }) => {
     employees: { title: 'Quản Lý Nhân Sự & Phân Quyền Vai Trò', subtitle: 'Hồ sơ nhân viên, phân quyền truy cập, lương cơ bản & cơ chế hoa hồng' },
     cashflow: { title: 'Sổ Quỹ Thu Chi & Dòng Tiền', subtitle: 'Quản lý thu chi tiền mặt, tiền gửi ngân hàng theo danh mục' },
     approvals: { title: 'Thẩm Định & Thảo Luận Duyệt Nợ', subtitle: 'Phê duyệt vượt trần tín dụng & bảo đảm an toàn dòng tiền' },
-    settings: { title: 'Cấu Hình Hệ Thống & Cổng VietQR', subtitle: 'Tùy chỉnh thông tin tài khoản ngân hàng, mã PIN & Telegram Webhook' }
+    settings: { title: 'Cấu Hình Hệ Thống & Cổng VietQR', subtitle: 'Tùy chỉnh thông tin tài khoản ngân hàng, mã PIN & Telegram Webhook' },
+    internal_chat: { title: 'Phòng Chat Nội Bộ Doanh Nghiệp', subtitle: 'Kênh trao đổi công việc tức thời giữa các bộ phận Bán Hàng, Kho Vận, Kế Toán' },
+    chat: { title: 'Phòng Chat Nội Bộ Doanh Nghiệp', subtitle: 'Kênh trao đổi công việc tức thời giữa các bộ phận Bán Hàng, Kho Vận, Kế Toán' }
   };
 
   const currentInfo = viewTitles[activeView] || { title: 'NEXUS ERP', subtitle: 'Hệ thống vận hành doanh nghiệp' };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 text-slate-800 dark:border-slate-800 dark:bg-[#0B0F19]/95 dark:text-white backdrop-blur px-6 transition-colors duration-200">
-      {/* Title & Context */}
-      <div>
-        <h1 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          {currentInfo.title}
-          {!canViewCosts && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium">
-              Chế độ Thu Ngân (Đã ẩn giá vốn)
-            </span>
-          )}
-        </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">{currentInfo.subtitle}</p>
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 text-slate-800 dark:border-slate-800 dark:bg-[#0B0F19]/95 dark:text-white backdrop-blur px-4 sm:px-6 transition-colors duration-200">
+      {/* Title & Context & Mobile Hamburger Button */}
+      <div className="flex items-center gap-2.5 sm:gap-3">
+        {onToggleMobileMenu && (
+          <button
+            onClick={onToggleMobileMenu}
+            className="p-1.5 -ml-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 md:hidden transition-colors border border-slate-200 dark:border-slate-700/70"
+            title="Mở menu điều hướng"
+            aria-label="Open Navigation Menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+        <div>
+          <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 truncate">
+            <span>{currentInfo.title}</span>
+            {!canViewCosts && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium hidden sm:inline">
+                Chế độ Thu Ngân (Đã ẩn giá vốn)
+              </span>
+            )}
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">{currentInfo.subtitle}</p>
+        </div>
       </div>
 
       {/* Action Controls - Grouped Neatly */}
@@ -135,28 +159,35 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView }) => {
 
           <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 my-auto" />
 
-          {/* Fast Role Switcher (1-Click) */}
-          <button
-            onClick={toggleRole}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+          {/* Static Role Badge (1 người 1 role cố định - Không chuyển đổi qua lại) */}
+          <div
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold select-none border transition-all ${
               role === 'admin'
-                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'
-                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60'
+                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800/80'
+                : role === 'manager'
+                ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200/80 dark:border-purple-800/80'
+                : role === 'cashier'
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80'
+                : role === 'warehouse'
+                ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80'
+                : 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200/80 dark:border-blue-800/80'
             }`}
-            title="Chuyển đổi vai trò: Quản trị viên (Admin) vs Thu ngân (Cashier)"
+            title={`Vai trò tài khoản: ${currentUser?.roleTitle || ROLE_CONFIG[role]?.label || role}`}
           >
             {role === 'admin' ? (
-              <>
-                <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span className="hidden sm:inline">Admin</span>
-              </>
+              <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            ) : role === 'manager' ? (
+              <Store className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+            ) : role === 'cashier' ? (
+              <Shield className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            ) : role === 'warehouse' ? (
+              <Warehouse className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
             ) : (
-              <>
-                <Shield className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span className="hidden sm:inline">Thu Ngân</span>
-              </>
+              <Wallet className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
             )}
-          </button>
+            <span className="hidden sm:inline">{currentUser?.roleTitle || ROLE_CONFIG[role]?.label || role}</span>
+            <span className="sm:hidden">{ROLE_CONFIG[role]?.label.split(' ')[0] || role}</span>
+          </div>
 
           <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 my-auto" />
 
@@ -214,6 +245,25 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView }) => {
           </div>
         </div>
 
+        {/* Quick Internal Chat Button */}
+        <button
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all active:scale-95 cursor-pointer ${
+            isChatOpen
+              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+              : 'bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
+          }`}
+          title="Mở Chatbox Nội Bộ"
+        >
+          <MessageSquare className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+          <span className="hidden sm:inline">Chat Nội Bộ</span>
+          {unreadChatCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
+              {unreadChatCount}
+            </span>
+          )}
+        </button>
+
         {/* User Profile & Menu Dropdown */}
         <div className="relative pl-2 border-l border-slate-200 dark:border-slate-800">
           <button
@@ -222,16 +272,16 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView }) => {
             title="Thông tin tài khoản & Đăng xuất"
           >
             <div className="h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 flex items-center justify-center text-xs font-bold border border-indigo-200 dark:border-indigo-800 shadow-xs">
-              {role === 'admin' ? 'AD' : 'TN'}
+              {role === 'admin' ? 'AD' : role === 'manager' ? 'MN' : role === 'cashier' ? 'TN' : role === 'warehouse' ? 'TK' : 'KT'}
             </div>
             <div className="hidden lg:block text-left text-xs">
               <div className="font-bold text-slate-900 dark:text-white leading-tight flex items-center gap-1">
-                <span>{currentUser?.name || (role === 'admin' ? 'Trần Hoàng Nam' : 'Nguyễn Văn Hùng')}</span>
+                <span>{currentUser?.name || 'Người Dùng ERP'}</span>
                 <ChevronDown className="h-3 w-3 text-slate-400" />
               </div>
               <div className="text-[10px] text-emerald-500 dark:text-emerald-400 flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {role === 'admin' ? 'Quản Trị Viên' : 'Thu Ngân'} (Ca sáng)
+                {currentUser?.roleTitle || ROLE_CONFIG[role]?.title || 'Nhân Viên'}
               </div>
             </div>
           </button>
@@ -241,14 +291,14 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView }) => {
             <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-2xl p-4 space-y-3 z-50 animate-in fade-in duration-150 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
               <div className="flex items-start gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
                 <div className="h-10 w-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-indigo-600/20 shrink-0">
-                  {role === 'admin' ? 'AD' : 'TN'}
+                  {role === 'admin' ? 'AD' : role === 'manager' ? 'MN' : role === 'cashier' ? 'TN' : role === 'warehouse' ? 'TK' : 'KT'}
                 </div>
                 <div className="truncate">
                   <div className="font-bold text-xs text-slate-900 dark:text-white truncate">
-                    {currentUser?.name || (role === 'admin' ? 'Trần Hoàng Nam' : 'Nguyễn Văn Hùng')}
+                    {currentUser?.name || 'Người Dùng ERP'}
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">
-                    {currentUser?.email || (role === 'admin' ? 'admin@nexus-erp.vn' : 'thungan@nexus-erp.vn')}
+                    {currentUser?.email || 'user@nexus-erp.vn'}
                   </div>
                   <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium truncate pt-0.5">
                     {currentUser?.businessName || 'Tập Đoàn Phân Phối NEXUS'}
@@ -256,8 +306,28 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView }) => {
                 </div>
               </div>
 
+              {/* Account Role & System Permission Info (Cố định 1 người 1 role) */}
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Vai Trò & Quyền Hạn
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-900 dark:text-white">
+                    {currentUser?.roleTitle || ROLE_CONFIG[role].label}
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                    {role === 'admin' ? 'Toàn quyền Admin' : 'Quyền theo vai trò'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                  {role === 'admin' 
+                    ? 'Bạn có toàn bộ đặc quyền quản trị và vận hành toàn hệ thống.' 
+                    : ROLE_CONFIG[role].description}
+                </p>
+              </div>
+
               {/* Menu Actions */}
-              <div className="space-y-1">
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
                 <button
                   onClick={() => {
                     setActiveView('auth');
@@ -267,17 +337,6 @@ export const Header: React.FC<Props> = ({ activeView, setActiveView }) => {
                 >
                   <KeyRound className="h-3.5 w-3.5 text-indigo-500" />
                   <span>Màn Hình Xác Thực (Auth View)</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    toggleRole();
-                    setShowUserDropdown(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                  <span>Đổi vai trò ({role === 'admin' ? 'Sang Thu Ngân' : 'Sang Admin'})</span>
                 </button>
               </div>
 

@@ -51,9 +51,9 @@ export const DashboardView: React.FC<{ onNavigate: (view: string) => void }> = (
   const lowStockProducts = products.filter((p) => p.stockBaseUnits <= p.minStockAlert);
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
+    <div className="p-6 space-y-6 w-full animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
       {/* 4 Master KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* KPI 1: Doanh Thu */}
         <div
           onClick={() => onNavigate('reports')}

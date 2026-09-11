@@ -1,8 +1,9 @@
-﻿"use client";
-import React, { useState, useMemo } from 'react';
+"use client";
+import React, { useState, useMemo, useRef } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Employee, EmployeeRole } from '../../types/erp';
 import { Pagination } from '../common/Pagination';
+import { RowActionMenu } from '../common/RowActionMenu';
 import {
   Users,
   UserCheck,
@@ -23,7 +24,11 @@ import {
   CheckCircle2,
   Calendar,
   Layers,
-  Sparkles
+  Sparkles,
+  Upload,
+  FolderOpen,
+  Camera,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export const EmployeeView: React.FC = () => {
@@ -54,9 +59,56 @@ export const EmployeeView: React.FC = () => {
     hireDate: new Date().toISOString().slice(0, 10),
     baseSalary: 10000000,
     commissionRate: 1.0,
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+    avatar: '',
     notes: ''
   });
+
+  // Local file browser avatar handling
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingAvatar, setIsDraggingAvatar] = useState(false);
+
+  const PRESET_AVATARS = [
+    { label: 'Nữ Thu Ngân', url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80' },
+    { label: 'Nam Quản Lý', url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80' },
+    { label: 'Nữ Kế Toán', url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80' },
+    { label: 'Nam Thủ Kho', url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80' },
+  ];
+
+  const processAvatarFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      showToast('⚠️ Vui lòng chọn tệp hình ảnh hợp lệ (PNG, JPG, WEBP)');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('⚠️ Dung lượng ảnh tối đa 5MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const result = e.target?.result as string;
+      if (result) {
+        setFormData(prev => ({ ...prev, avatar: result }));
+        showToast('📷 Đã tải ảnh nhân viên từ thư mục máy tính thành công!');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAvatarFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processAvatarFile(file);
+    }
+  };
+
+  const handleDropAvatar = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingAvatar(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processAvatarFile(file);
+    }
+  };
 
   // Filtered employees
   const filteredEmployees = useMemo(() => {
@@ -105,7 +157,7 @@ export const EmployeeView: React.FC = () => {
       hireDate: new Date().toISOString().slice(0, 10),
       baseSalary: 10000000,
       commissionRate: 1.0,
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+      avatar: '',
       notes: ''
     });
     setIsModalOpen(true);
@@ -217,7 +269,7 @@ export const EmployeeView: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 w-full">
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -492,24 +544,25 @@ export const EmployeeView: React.FC = () => {
 
                       {/* Actions */}
                       <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            id={`edit-employee-${emp.id}`}
-                            onClick={() => handleOpenEdit(emp)}
-                            title="Chỉnh sửa hồ sơ"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            id={`delete-employee-${emp.id}`}
-                            onClick={() => handleDelete(emp.id, emp.name)}
-                            title="Xóa hồ sơ"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        <RowActionMenu
+                          items={[
+                            {
+                              id: `edit-employee-${emp.id}`,
+                              label: 'Chỉnh sửa hồ sơ',
+                              icon: Edit2,
+                              variant: 'indigo',
+                              onClick: () => handleOpenEdit(emp),
+                            },
+                            {
+                              id: `delete-employee-${emp.id}`,
+                              label: 'Xóa nhân viên',
+                              icon: Trash2,
+                              variant: 'danger',
+                              divider: true,
+                              onClick: () => handleDelete(emp.id, emp.name),
+                            },
+                          ]}
+                        />
                       </td>
                     </tr>
                   );
@@ -707,17 +760,100 @@ export const EmployeeView: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Link Ảnh Đại Diện (Avatar)
-                </label>
+              {/* Local Folder Avatar Picker (Chọn từ thư mục máy tính) */}
+              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    Ảnh Đại Diện Nhân Viên (Chọn Từ Thư Mục Máy Tính)
+                  </label>
+                  {formData.avatar && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, avatar: '' })}
+                      className="text-[11px] text-rose-600 hover:underline flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" /> Xóa ảnh
+                    </button>
+                  )}
+                </div>
+
+                {/* Hidden input for local file browser */}
                 <input
-                  type="url"
-                  value={formData.avatar}
-                  onChange={e => setFormData({ ...formData, avatar: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
-                  placeholder="https://images.unsplash.com/..."
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handleAvatarFileSelect}
+                  className="hidden"
                 />
+
+                {/* Dropzone & Preview Box */}
+                {formData.avatar ? (
+                  <div className="flex items-center gap-4 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <img
+                      src={formData.avatar}
+                      alt="Xem trước ảnh đại diện nhân viên"
+                      className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500 shadow-sm shrink-0"
+                    />
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Đã chọn ảnh chân dung nhân viên
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Ảnh đã tải trực tiếp từ máy tính và sẵn sàng lưu vào hồ sơ nhân sự.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 flex items-center gap-1.5 transition-colors"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" /> Đổi Ảnh Khác Từ Máy Tính
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={e => {
+                      e.preventDefault();
+                      setIsDraggingAvatar(true);
+                    }}
+                    onDragLeave={() => setIsDraggingAvatar(false)}
+                    onDrop={handleDropAvatar}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
+                      isDraggingAvatar
+                        ? 'border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 scale-[1.01]'
+                        : 'border-slate-300 dark:border-slate-700 hover:border-indigo-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mb-2">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      Nhấn vào đây để chọn ảnh từ thư mục máy tính
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                      hoặc kéo thả tệp hình ảnh vào khung này (Hỗ trợ PNG, JPG, WEBP, tối đa 5MB)
+                    </span>
+                  </div>
+                )}
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                  <span className="text-[10px] text-slate-400 font-medium">Hoặc chọn nhanh ảnh mẫu:</span>
+                  {PRESET_AVATARS.map(p => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, avatar: p.url })}
+                      className="px-2 py-0.5 text-[10px] rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 text-slate-600 dark:text-slate-300"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>

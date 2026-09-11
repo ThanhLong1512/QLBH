@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Product, ProductBatch, SerialItem, PackagingUnit } from '../../types/erp';
 import { Pagination } from '../common/Pagination';
+import { MoneyInput } from '../common/MoneyInput';
+import { RowActionMenu } from '../common/RowActionMenu';
 import {
   Package,
   Layers,
@@ -314,7 +316,7 @@ export const WarehouseView: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
+    <div className="p-6 space-y-6 w-full animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
       {/* 1. TOP HEADER & UNIFIED ACTION TOOLBAR */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-1 border-b border-slate-200 dark:border-slate-800">
         <div>
@@ -541,29 +543,25 @@ export const WarehouseView: React.FC = () => {
 
                           {/* CRUD ACTION BUTTON GROUP */}
                           <td className="p-4 text-center">
-                            <div className="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700/80 shadow-xs">
-                              {/* Edit Button */}
-                              <button
-                                onClick={() => handleOpenEditProduct(prod)}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors"
-                                title="Chỉnh sửa thông tin, giá bán và đơn vị tính"
-                              >
-                                <Edit2 className="h-3.5 w-3.5 text-indigo-500" />
-                                <span>Sửa</span>
-                              </button>
-
-                              <div className="h-3.5 w-px bg-slate-300 dark:bg-slate-700 mx-0.5" />
-
-                              {/* Delete Button */}
-                              <button
-                                onClick={() => setDeletingProduct(prod)}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-white dark:hover:bg-slate-700 hover:text-rose-700 transition-colors"
-                                title="Xóa mặt hàng này khỏi hệ thống"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                <span>Xóa</span>
-                              </button>
-                            </div>
+                            <RowActionMenu
+                              items={[
+                                {
+                                  id: `edit-${prod.id}`,
+                                  label: 'Chỉnh sửa thông tin & ĐVT',
+                                  icon: Edit2,
+                                  variant: 'indigo',
+                                  onClick: () => handleOpenEditProduct(prod),
+                                },
+                                {
+                                  id: `delete-${prod.id}`,
+                                  label: 'Xóa mặt hàng',
+                                  icon: Trash2,
+                                  variant: 'danger',
+                                  divider: true,
+                                  onClick: () => setDeletingProduct(prod),
+                                },
+                              ]}
+                            />
                           </td>
                         </tr>
                       );
@@ -627,19 +625,27 @@ export const WarehouseView: React.FC = () => {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                        <button
-                          onClick={() => handleOpenEditProduct(prod)}
-                          className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5"
-                        >
-                          <Edit2 className="h-3.5 w-3.5 text-indigo-500" /> Sửa
-                        </button>
-                        <button
-                          onClick={() => setDeletingProduct(prod)}
-                          className="px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-xs font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Xóa
-                        </button>
+                      <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <RowActionMenu
+                          label="Thao tác"
+                          items={[
+                            {
+                              id: `edit-${prod.id}`,
+                              label: 'Chỉnh sửa thông tin & ĐVT',
+                              icon: Edit2,
+                              variant: 'indigo',
+                              onClick: () => handleOpenEditProduct(prod),
+                            },
+                            {
+                              id: `delete-${prod.id}`,
+                              label: 'Xóa mặt hàng',
+                              icon: Trash2,
+                              variant: 'danger',
+                              divider: true,
+                              onClick: () => setDeletingProduct(prod),
+                            },
+                          ]}
+                        />
                       </div>
                     </div>
                   );
@@ -1117,40 +1123,44 @@ export const WarehouseView: React.FC = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="space-y-1">
                     <label className="font-semibold text-slate-600 dark:text-slate-400">Giá Vốn TB</label>
-                    <input
-                      type="number"
+                    <MoneyInput
                       value={formData.costPrice}
-                      onChange={(e) => setFormData({ ...formData, costPrice: parseFloat(e.target.value) || 0 })}
+                      onChange={(val) => setFormData({ ...formData, costPrice: val })}
+                      placeholder="0"
+                      suffix="đ"
                       className="w-full rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 font-mono font-bold text-xs text-slate-900 dark:text-white"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <label className="font-semibold text-indigo-600 dark:text-indigo-400">Giá Bán Lẻ</label>
-                    <input
-                      type="number"
+                    <MoneyInput
                       value={formData.retailPrice}
-                      onChange={(e) => setFormData({ ...formData, retailPrice: parseFloat(e.target.value) || 0 })}
+                      onChange={(val) => setFormData({ ...formData, retailPrice: val })}
+                      placeholder="0"
+                      suffix="đ"
                       className="w-full rounded-lg bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-500/50 px-2.5 py-1.5 font-mono font-bold text-xs text-indigo-700 dark:text-indigo-300"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <label className="font-semibold text-emerald-600 dark:text-emerald-400">Giá Bán Buôn (Sỉ)</label>
-                    <input
-                      type="number"
+                    <MoneyInput
                       value={formData.wholesalePrice}
-                      onChange={(e) => setFormData({ ...formData, wholesalePrice: parseFloat(e.target.value) || 0 })}
+                      onChange={(val) => setFormData({ ...formData, wholesalePrice: val })}
+                      placeholder="0"
+                      suffix="đ"
                       className="w-full rounded-lg bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-500/50 px-2.5 py-1.5 font-mono font-bold text-xs text-emerald-700 dark:text-emerald-300"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <label className="font-semibold text-amber-600 dark:text-amber-400">Giá Khách VIP</label>
-                    <input
-                      type="number"
+                    <MoneyInput
                       value={formData.vipPrice}
-                      onChange={(e) => setFormData({ ...formData, vipPrice: parseFloat(e.target.value) || 0 })}
+                      onChange={(val) => setFormData({ ...formData, vipPrice: val })}
+                      placeholder="0"
+                      suffix="đ"
                       className="w-full rounded-lg bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-500/50 px-2.5 py-1.5 font-mono font-bold text-xs text-amber-700 dark:text-amber-300"
                     />
                   </div>

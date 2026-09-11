@@ -1,8 +1,10 @@
-﻿"use client";
+"use client";
 import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Supplier } from '../../types/erp';
 import { Pagination } from '../common/Pagination';
+import { MoneyInput } from '../common/MoneyInput';
+import { RowActionMenu } from '../common/RowActionMenu';
 import {
   Truck,
   Building2,
@@ -15,6 +17,7 @@ import {
   Phone,
   Mail,
   CreditCard,
+  Wallet,
   AlertCircle,
   CheckCircle2,
   DollarSign,
@@ -246,7 +249,7 @@ export const SupplierView: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 w-full">
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -507,34 +510,36 @@ export const SupplierView: React.FC = () => {
 
                       {/* Actions */}
                       <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {hasDebt && (
-                            <button
-                              id={`pay-supplier-${sup.id}`}
-                              onClick={() => handleOpenPay(sup)}
-                              title="Chi trả công nợ cho NCC"
-                              className="px-2 py-1 rounded-md text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-colors"
-                            >
-                              Trả Nợ
-                            </button>
-                          )}
-                          <button
-                            id={`edit-supplier-${sup.id}`}
-                            onClick={() => handleOpenEdit(sup)}
-                            title="Sửa thông tin NCC"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            id={`delete-supplier-${sup.id}`}
-                            onClick={() => handleDelete(sup.id, sup.name)}
-                            title="Xóa NCC"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        <RowActionMenu
+                          items={[
+                            ...(hasDebt
+                              ? [
+                                  {
+                                    id: `pay-supplier-${sup.id}`,
+                                    label: 'Chi trả công nợ NCC',
+                                    icon: Wallet,
+                                    variant: 'success' as const,
+                                    onClick: () => handleOpenPay(sup),
+                                  },
+                                ]
+                              : []),
+                            {
+                              id: `edit-supplier-${sup.id}`,
+                              label: 'Sửa thông tin NCC',
+                              icon: Edit2,
+                              variant: 'indigo',
+                              onClick: () => handleOpenEdit(sup),
+                            },
+                            {
+                              id: `delete-supplier-${sup.id}`,
+                              label: 'Xóa nhà cung cấp',
+                              icon: Trash2,
+                              variant: 'danger',
+                              divider: true,
+                              onClick: () => handleDelete(sup.id, sup.name),
+                            },
+                          ]}
+                        />
                       </td>
                     </tr>
                   );
@@ -811,13 +816,12 @@ export const SupplierView: React.FC = () => {
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Số Tiền Chi Trả (VNĐ) *
                 </label>
-                <input
-                  type="number"
+                <MoneyInput
                   required
-                  min={1000}
-                  max={selectedSupplierForPay.currentDebt}
                   value={payAmount}
-                  onChange={e => setPayAmount(Number(e.target.value))}
+                  onChange={val => setPayAmount(val)}
+                  placeholder="0"
+                  suffix="đ"
                   className="w-full px-3 py-2 text-sm font-bold text-emerald-600 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
                 />
               </div>

@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Customer } from '../../types/erp';
 import { Pagination } from '../common/Pagination';
+import { RowActionMenu } from '../common/RowActionMenu';
 import {
   TrendingDown,
   AlertCircle,
@@ -122,7 +123,7 @@ export const DebtAgingView: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
+    <div className="p-6 space-y-6 w-full animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
       {/* Header & Grouped Action Toolbar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>
@@ -344,27 +345,25 @@ export const DebtAgingView: React.FC = () => {
 
                     {/* Grouped Action Buttons */}
                     <td className="p-4 text-center">
-                      <div className="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700 shadow-xs">
-                        <button
-                          onClick={() => handleOpenCollectModal(cust)}
-                          className="px-2.5 py-1 rounded-lg text-emerald-700 dark:text-emerald-400 hover:bg-white dark:hover:bg-slate-700 font-semibold text-xs flex items-center gap-1 transition-colors"
-                          title="Ghi nhận thu nợ"
-                        >
-                          <Wallet className="h-3.5 w-3.5" />
-                          <span>Thu Nợ</span>
-                        </button>
-
-                        <div className="h-3 w-px bg-slate-300 dark:bg-slate-700 mx-0.5" />
-
-                        <button
-                          onClick={() => handleSendReminder(cust)}
-                          className="px-2.5 py-1 rounded-lg text-indigo-700 dark:text-indigo-400 hover:bg-white dark:hover:bg-slate-700 font-semibold text-xs flex items-center gap-1 transition-colors"
-                          title="Gửi tin nhắn SMS / Zalo nhắc nợ"
-                        >
-                          <Send className="h-3.5 w-3.5" />
-                          <span>Nhắc Nợ</span>
-                        </button>
-                      </div>
+                      <RowActionMenu
+                        label="Thao tác"
+                        items={[
+                          {
+                            id: `collect-${cust.id}`,
+                            label: 'Ghi nhận thu nợ',
+                            icon: Wallet,
+                            variant: 'success',
+                            onClick: () => handleOpenCollectModal(cust),
+                          },
+                          {
+                            id: `remind-${cust.id}`,
+                            label: 'Gửi SMS/Zalo nhắc nợ',
+                            icon: Send,
+                            variant: 'indigo',
+                            onClick: () => handleSendReminder(cust),
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))
@@ -429,21 +428,26 @@ export const DebtAgingView: React.FC = () => {
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60">
-                  <button
-                    onClick={() => handleOpenCollectModal(cust)}
-                    className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-xs transition-colors"
-                  >
-                    <Wallet className="h-3.5 w-3.5" />
-                    <span>Thu Nợ</span>
-                  </button>
-                  <button
-                    onClick={() => handleSendReminder(cust)}
-                    className="flex-1 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-bold text-xs flex items-center justify-center gap-1 transition-colors"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    <span>Nhắc Nợ Zalo/SMS</span>
-                  </button>
+                <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800/60">
+                  <RowActionMenu
+                    label="Thao tác thu/nhắc nợ"
+                    items={[
+                      {
+                        id: `collect-mob-${cust.id}`,
+                        label: 'Ghi nhận thu nợ',
+                        icon: Wallet,
+                        variant: 'success',
+                        onClick: () => handleOpenCollectModal(cust),
+                      },
+                      {
+                        id: `remind-mob-${cust.id}`,
+                        label: 'Gửi SMS/Zalo nhắc nợ',
+                        icon: Send,
+                        variant: 'indigo',
+                        onClick: () => handleSendReminder(cust),
+                      },
+                    ]}
+                  />
                 </div>
               </div>
             ))

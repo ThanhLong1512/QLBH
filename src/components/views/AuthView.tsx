@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { UserRole } from '../../types/erp';
+import { UserRole, ROLE_CONFIG } from '../../types/erp';
 import {
   ShieldCheck,
   Shield,
@@ -22,7 +22,10 @@ import {
   Moon,
   KeyRound,
   Layers,
-  Store
+  Store,
+  Warehouse,
+  Wallet,
+  Loader2
 } from 'lucide-react';
 
 interface Props {
@@ -41,6 +44,7 @@ export const AuthView: React.FC<Props> = ({ initialMode = 'login', onSuccess }) 
   const [loginRole, setLoginRole] = useState<UserRole>('admin');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Register state
   const [regName, setRegName] = useState('');
@@ -48,6 +52,7 @@ export const AuthView: React.FC<Props> = ({ initialMode = 'login', onSuccess }) 
   const [regEmail, setRegEmail] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regScale, setRegScale] = useState('Chuỗi 3-10 Chi Nhánh');
+  const [regRole, setRegRole] = useState<UserRole>('admin');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regAgreed, setRegAgreed] = useState(true);
@@ -61,22 +66,33 @@ export const AuthView: React.FC<Props> = ({ initialMode = 'login', onSuccess }) 
   const [forgotConfirmPass, setForgotConfirmPass] = useState('');
   const [otpCountdown, setOtpCountdown] = useState(60);
 
-  // Quick fill demo credentials
+  // Quick fill demo credentials (All 5 Roles)
   const fillDemo = (roleType: UserRole) => {
+    setLoginRole(roleType);
     if (roleType === 'admin') {
       setLoginEmail('admin@nexus-erp.vn');
       setLoginPassword('123456');
-      setLoginRole('admin');
-      showToast('⚡ Đã nạp thông tin tài khoản: Quản Trị Viên (Admin)');
-    } else {
+      showToast('⚡ Đã nạp tài khoản: Quản Trị Viên (Admin)');
+    } else if (roleType === 'manager') {
+      setLoginEmail('quanly@nexus-erp.vn');
+      setLoginPassword('123456');
+      showToast('⚡ Đã nạp tài khoản: Cửa Hàng Trưởng (Manager)');
+    } else if (roleType === 'cashier') {
       setLoginEmail('thungan@nexus-erp.vn');
       setLoginPassword('123456');
-      setLoginRole('cashier');
-      showToast('⚡ Đã nạp thông tin tài khoản: Thu Ngân (Cashier)');
+      showToast('⚡ Đã nạp tài khoản: Thu Ngân (Cashier)');
+    } else if (roleType === 'warehouse') {
+      setLoginEmail('thukho@nexus-erp.vn');
+      setLoginPassword('123456');
+      showToast('⚡ Đã nạp tài khoản: Thủ Kho (Warehouse)');
+    } else if (roleType === 'accountant') {
+      setLoginEmail('ketoan@nexus-erp.vn');
+      setLoginPassword('123456');
+      showToast('⚡ Đã nạp tài khoản: Kế Toán Trưởng (Accountant)');
     }
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail.trim()) {
       showToast('⚠️ Vui lòng nhập Email hoặc Tên đăng nhập!');
@@ -87,11 +103,18 @@ export const AuthView: React.FC<Props> = ({ initialMode = 'login', onSuccess }) 
       return;
     }
 
-    login(loginEmail, loginPassword, loginRole);
-    if (onSuccess) onSuccess();
+    setIsSubmitting(true);
+    try {
+      const ok = await login(loginEmail, loginPassword, loginRole);
+      if (ok && onSuccess) {
+        onSuccess();
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regName.trim() || !regBusinessName.trim() || !regEmail.trim() || !regPhone.trim()) {
       showToast('⚠️ Vui lòng điền đầy đủ các thông tin doanh nghiệp bắt buộc!');
@@ -110,16 +133,23 @@ export const AuthView: React.FC<Props> = ({ initialMode = 'login', onSuccess }) 
       return;
     }
 
-    register({
-      name: regName,
-      businessName: regBusinessName,
-      email: regEmail,
-      phone: regPhone,
-      businessScale: regScale,
-      password: regPassword,
-      role: 'admin'
-    });
-    if (onSuccess) onSuccess();
+    setIsSubmitting(true);
+    try {
+      const ok = await register({
+        name: regName,
+        businessName: regBusinessName,
+        email: regEmail,
+        phone: regPhone,
+        businessScale: regScale,
+        password: regPassword,
+        role: regRole,
+      });
+      if (ok && onSuccess) {
+        onSuccess();
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSendOtp = (e: React.FormEvent) => {
@@ -328,33 +358,72 @@ export const AuthView: React.FC<Props> = ({ initialMode = 'login', onSuccess }) 
               {/* Fast Demo Pill Buttons */}
               <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between text-[11px] text-slate-500">
-                  <span className="font-semibold">Nạp nhanh tài khoản mẫu:</span>
+                  <span className="font-semibold">Nạp nhanh 5 tài khoản mẫu theo vai trò:</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                   <button
                     type="button"
                     onClick={() => fillDemo('admin')}
-                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl border text-[11px] font-bold transition-all ${
                       loginRole === 'admin'
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-600'
+                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-600 shadow-xs'
                         : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
                     }`}
                   >
-                    <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
-                    <span>Admin Quản Trị</span>
+                    <ShieldCheck className="h-3 w-3 text-indigo-600" />
+                    <span>Admin</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fillDemo('manager')}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl border text-[11px] font-bold transition-all ${
+                      loginRole === 'manager'
+                        ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-600 shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Store className="h-3 w-3 text-purple-600" />
+                    <span>Quản Lý</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => fillDemo('cashier')}
-                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl border text-[11px] font-bold transition-all ${
                       loginRole === 'cashier'
-                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-600'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-600 shadow-xs'
                         : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
                     }`}
                   >
-                    <Shield className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>Thu Ngân Bán Hàng</span>
+                    <Shield className="h-3 w-3 text-emerald-600" />
+                    <span>Thu Ngân</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fillDemo('warehouse')}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl border text-[11px] font-bold transition-all ${
+                      loginRole === 'warehouse'
+                        ? 'border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-600 shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Warehouse className="h-3 w-3 text-amber-600" />
+                    <span>Thủ Kho</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fillDemo('accountant')}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl border text-[11px] font-bold transition-all col-span-2 sm:col-span-1 ${
+                      loginRole === 'accountant'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-600 shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Wallet className="h-3 w-3 text-blue-600" />
+                    <span>Kế Toán</span>
                   </button>
                 </div>
               </div>
@@ -425,10 +494,20 @@ export const AuthView: React.FC<Props> = ({ initialMode = 'login', onSuccess }) 
                 {/* Submit Login Button */}
                 <button
                   type="submit"
-                  className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  disabled={isSubmitting}
+                  className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 text-white font-bold text-xs shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                 >
-                  <span>Đăng Nhập Vào Hệ Thống</span>
-                  <ArrowRight className="h-4 w-4" />
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Đang xác thực với hệ thống...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Đăng Nhập Vào Hệ Thống</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
                 </button>
               </form>
 
@@ -532,23 +611,45 @@ export const AuthView: React.FC<Props> = ({ initialMode = 'login', onSuccess }) 
                   </div>
                 </div>
 
-                {/* Scale selection */}
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Quy mô vận hành hiện tại
-                  </label>
-                  <div className="relative">
-                    <Layers className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                    <select
-                      value={regScale}
-                      onChange={(e) => setRegScale(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="1-2 Cửa Hàng Bán Lẻ">1-2 Cửa Hàng Bán Lẻ</option>
-                      <option value="Chuỗi 3-10 Chi Nhánh">Chuỗi 3-10 Chi Nhánh</option>
-                      <option value="Chuỗi 10+ Chi Nhánh & Kho Tổng">Chuỗi 10+ Chi Nhánh & Kho Tổng</option>
-                      <option value="Nhà Phân Phối B2B & Đại Lý Toàn Quốc">Nhà Phân Phối B2B & Đại Lý Toàn Quốc</option>
-                    </select>
+                {/* Scale selection & Initial Role Selection */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Quy mô vận hành
+                    </label>
+                    <div className="relative">
+                      <Layers className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                      <select
+                        value={regScale}
+                        onChange={(e) => setRegScale(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="1-2 Cửa Hàng Bán Lẻ">1-2 Cửa Hàng Bán Lẻ</option>
+                        <option value="Chuỗi 3-10 Chi Nhánh">Chuỗi 3-10 Chi Nhánh</option>
+                        <option value="Chuỗi 10+ Chi Nhánh & Kho Tổng">Chuỗi 10+ Chi Nhánh & Kho Tổng</option>
+                        <option value="Nhà Phân Phối B2B & Đại Lý Toàn Quốc">Nhà Phân Phối B2B & Đại Lý Toàn Quốc</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Vai trò / Phân quyền ban đầu *
+                    </label>
+                    <div className="relative">
+                      <Shield className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                      <select
+                        value={regRole}
+                        onChange={(e) => setRegRole(e.target.value as UserRole)}
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                      >
+                        <option value="admin">Quản Trị Viên (Admin)</option>
+                        <option value="manager">Cửa Hàng Trưởng (Manager)</option>
+                        <option value="cashier">Thu Ngân POS (Cashier)</option>
+                        <option value="warehouse">Thủ Kho & Vận Hành (Warehouse)</option>
+                        <option value="accountant">Kế Toán Trưởng (Accountant)</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -612,10 +713,20 @@ export const AuthView: React.FC<Props> = ({ initialMode = 'login', onSuccess }) 
                 {/* Submit Register Button */}
                 <button
                   type="submit"
-                  className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                  disabled={isSubmitting}
+                  className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 text-white font-bold text-xs shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                 >
-                  <span>Khởi Tạo Doanh Nghiệp & Bắt Đầu Ngay</span>
-                  <ArrowRight className="h-4 w-4" />
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Đang lưu thông tin vào cơ sở dữ liệu...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Khởi Tạo Tài Khoản & Lưu DB</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
                 </button>
               </form>
 

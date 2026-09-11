@@ -1,7 +1,8 @@
-﻿"use client";
+"use client";
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Pagination } from '../common/Pagination';
+import { MoneyInput } from '../common/MoneyInput';
 import { CashTransaction } from '../../types/erp';
 import {
   Wallet,
@@ -206,7 +207,7 @@ export const CashFlowView: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
+    <div className="p-6 space-y-6 w-full animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
       {/* HEADER & ACTION BAR */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>
@@ -688,14 +689,12 @@ export const CashFlowView: React.FC = () => {
               {/* Amount */}
               <div className="space-y-1">
                 <label className="font-semibold text-slate-700 dark:text-slate-300">Số Tiền (VNĐ) *</label>
-                <input
-                  type="number"
+                <MoneyInput
                   required
-                  min="1000"
-                  step="1000"
-                  value={amount || ''}
-                  onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+                  value={amount}
+                  onChange={(val) => setAmount(val)}
                   placeholder="0"
+                  suffix="đ"
                   className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2.5 text-base font-mono font-bold text-slate-900 dark:text-white"
                 />
               </div>

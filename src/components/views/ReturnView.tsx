@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { ReturnReceipt, ReturnItem } from '../../types/erp';
@@ -322,7 +322,7 @@ export const ReturnView: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 w-full">
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

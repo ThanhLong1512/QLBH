@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Pagination } from '../common/Pagination';
@@ -517,7 +517,7 @@ export const SalesReportView: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
+    <div className="p-6 space-y-6 w-full animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
       {/* HEADER & GLOBAL ACTIONS */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-2 border-b border-slate-200 dark:border-slate-800">
         <div>

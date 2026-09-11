@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
+import { MoneyInput } from '../common/MoneyInput';
 import {
   Clock,
   Banknote,
@@ -125,7 +126,7 @@ export const ShiftView: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
+    <div className="p-6 space-y-6 w-full animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
       {/* Header Info */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -261,11 +262,11 @@ export const ShiftView: React.FC = () => {
           <form onSubmit={handleCloseShift} className="space-y-4 text-xs">
             <div className="space-y-1.5">
               <label className="text-slate-800 dark:text-slate-200 font-bold">Số Tiền Mặt Thực Kiểm Đếm (VNĐ):</label>
-              <input
-                type="number"
+              <MoneyInput
                 value={actualCash}
-                onChange={(e) => setActualCash(parseFloat(e.target.value) || 0)}
+                onChange={(val) => setActualCash(val)}
                 disabled={currentShift.isClosed}
+                suffix="đ"
                 className="w-full rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 px-4 py-3 text-lg font-mono font-black text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-indigo-500 disabled:opacity-60"
               />
             </div>

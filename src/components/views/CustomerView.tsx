@@ -3,6 +3,8 @@ import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Customer, CustomerTier } from '../../types/erp';
 import { Pagination } from '../common/Pagination';
+import { MoneyInput } from '../common/MoneyInput';
+import { RowActionMenu } from '../common/RowActionMenu';
 import {
   Users,
   Search,
@@ -286,7 +288,7 @@ export const CustomerView: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
+    <div className="p-6 space-y-6 w-full animate-in fade-in duration-200 text-slate-800 dark:text-slate-100">
       {/* 1. TOP HEADER & UNIFIED ACTION TOOLBAR */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-1 border-b border-slate-200 dark:border-slate-800">
         <div>
@@ -518,41 +520,33 @@ export const CustomerView: React.FC = () => {
 
                         {/* CRUD ACTION BUTTON GROUP */}
                         <td className="p-4 text-center">
-                          <div className="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700/80 shadow-xs">
-                            {/* Quick Collect Debt */}
-                            <button
-                              onClick={() => handleOpenDebtPayment(cust)}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-white dark:hover:bg-slate-700 transition-colors"
-                              title="Ghi nhận thu công nợ của khách hàng này"
-                            >
-                              <Wallet className="h-3.5 w-3.5" />
-                              <span>Thu Nợ</span>
-                            </button>
-
-                            <div className="h-3.5 w-px bg-slate-300 dark:bg-slate-700 mx-0.5" />
-
-                            {/* Edit Button */}
-                            <button
-                              onClick={() => handleOpenEditCustomer(cust)}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors"
-                              title="Chỉnh sửa thông tin khách hàng & hạn mức tín dụng"
-                            >
-                              <Edit2 className="h-3.5 w-3.5 text-indigo-500" />
-                              <span>Sửa</span>
-                            </button>
-
-                            <div className="h-3.5 w-px bg-slate-300 dark:bg-slate-700 mx-0.5" />
-
-                            {/* Delete Button */}
-                            <button
-                              onClick={() => setDeletingCust(cust)}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-white dark:hover:bg-slate-700 hover:text-rose-700 transition-colors"
-                              title="Xóa khách hàng này"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              <span>Xóa</span>
-                            </button>
-                          </div>
+                          <RowActionMenu
+                            label="Thao tác"
+                            items={[
+                              {
+                                id: `pay-${cust.id}`,
+                                label: 'Ghi nhận thu nợ',
+                                icon: Wallet,
+                                variant: 'success',
+                                onClick: () => handleOpenDebtPayment(cust),
+                              },
+                              {
+                                id: `edit-${cust.id}`,
+                                label: 'Chỉnh sửa thông tin',
+                                icon: Edit2,
+                                variant: 'indigo',
+                                onClick: () => handleOpenEditCustomer(cust),
+                              },
+                              {
+                                id: `delete-${cust.id}`,
+                                label: 'Xóa khách hàng',
+                                icon: Trash2,
+                                variant: 'danger',
+                                divider: true,
+                                onClick: () => setDeletingCust(cust),
+                              },
+                            ]}
+                          />
                         </td>
                       </tr>
                     );
@@ -648,28 +642,34 @@ export const CustomerView: React.FC = () => {
 
                       {/* Card Actions Group */}
                       <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
-                        <button
-                          onClick={() => handleOpenDebtPayment(cust)}
-                          className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
-                        >
-                          <Wallet className="h-3.5 w-3.5" /> Thu Nợ
-                        </button>
-
-                        <div className="inline-flex items-center rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700/80">
-                          <button
-                            onClick={() => handleOpenEditCustomer(cust)}
-                            className="px-2 py-1 rounded text-xs text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 flex items-center gap-1 font-semibold"
-                          >
-                            <Edit2 className="h-3 w-3 text-indigo-500" /> Sửa
-                          </button>
-                          <div className="h-3 w-px bg-slate-300 dark:bg-slate-700 mx-0.5" />
-                          <button
-                            onClick={() => setDeletingCust(cust)}
-                            className="px-2 py-1 rounded text-xs text-rose-600 dark:text-rose-400 hover:bg-white dark:hover:bg-slate-700 flex items-center gap-1 font-semibold"
-                          >
-                            <Trash2 className="h-3 w-3" /> Xóa
-                          </button>
-                        </div>
+                        <span className="text-xs text-slate-500 font-medium">Thao tác hồ sơ:</span>
+                        <RowActionMenu
+                          label="Thao tác"
+                          items={[
+                            {
+                              id: `pay-${cust.id}`,
+                              label: 'Ghi nhận thu nợ',
+                              icon: Wallet,
+                              variant: 'success',
+                              onClick: () => handleOpenDebtPayment(cust),
+                            },
+                            {
+                              id: `edit-${cust.id}`,
+                              label: 'Chỉnh sửa thông tin',
+                              icon: Edit2,
+                              variant: 'indigo',
+                              onClick: () => handleOpenEditCustomer(cust),
+                            },
+                            {
+                              id: `delete-${cust.id}`,
+                              label: 'Xóa khách hàng',
+                              icon: Trash2,
+                              variant: 'danger',
+                              divider: true,
+                              onClick: () => setDeletingCust(cust),
+                            },
+                          ]}
+                        />
                       </div>
                     </div>
                   </div>
@@ -796,12 +796,11 @@ export const CustomerView: React.FC = () => {
                   </label>
                   <span className="text-[10px] text-indigo-700 dark:text-indigo-400">Chặn xuất đơn khi vượt trần</span>
                 </div>
-                <input
-                  type="number"
-                  min="0"
-                  step="1000000"
+                <MoneyInput
                   value={formData.creditLimit}
-                  onChange={(e) => setFormData({ ...formData, creditLimit: parseFloat(e.target.value) || 0 })}
+                  onChange={(val) => setFormData({ ...formData, creditLimit: val })}
+                  placeholder="0"
+                  suffix="đ"
                   className="w-full rounded-xl bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-500/50 px-3 py-2 text-sm font-mono font-bold text-indigo-700 dark:text-indigo-300"
                 />
                 <div className="text-[10px] text-slate-500">Nhập 0 nếu chỉ bán tiền mặt, không cấp hạn mức nợ gối đầu.</div>
@@ -852,13 +851,12 @@ export const CustomerView: React.FC = () => {
             <form onSubmit={handleSubmitDebtPayment} className="space-y-3.5 text-xs">
               <div className="space-y-1">
                 <label className="font-semibold text-slate-700 dark:text-slate-300">Số Tiền Thu Nợ (VNĐ) *</label>
-                <input
-                  type="number"
+                <MoneyInput
                   required
-                  min="1000"
-                  step="1000"
                   value={payAmount}
-                  onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
+                  onChange={(val) => setPayAmount(val)}
+                  placeholder="0"
+                  suffix="đ"
                   className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-emerald-300 dark:border-emerald-500/50 px-3 py-2.5 text-base font-mono font-black text-emerald-600 dark:text-emerald-400 focus:outline-none"
                 />
               </div>

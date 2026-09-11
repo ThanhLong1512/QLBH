@@ -1,6 +1,6 @@
 // TypeScript definitions for NEXUS Retail & Distribution ERP
 
-export type UserRole = 'admin' | 'cashier';
+export type UserRole = 'admin' | 'manager' | 'cashier' | 'warehouse' | 'accountant';
 
 export interface AuthUser {
   id: string;
@@ -8,10 +8,151 @@ export interface AuthUser {
   email: string;
   phone: string;
   role: UserRole;
+  roleTitle?: string;
   businessName: string;
   businessScale?: string;
   avatar?: string;
 }
+
+export type PermissionKey =
+  | 'view_dashboard'
+  | 'pos_sales'
+  | 'manage_orders'
+  | 'manage_returns'
+  | 'cash_shift'
+  | 'manage_products'
+  | 'manage_inventory'
+  | 'manage_warehouse'
+  | 'manage_serials'
+  | 'manage_warranty'
+  | 'manage_customers'
+  | 'manage_suppliers'
+  | 'manage_debt_aging'
+  | 'manage_employees'
+  | 'manage_cashflow'
+  | 'manage_approvals'
+  | 'view_reports'
+  | 'system_settings'
+  | 'view_cost_price'
+  | 'export_data';
+
+export const ROLE_PERMISSIONS: Record<UserRole, PermissionKey[]> = {
+  admin: [
+    'view_dashboard',
+    'pos_sales',
+    'manage_orders',
+    'manage_returns',
+    'cash_shift',
+    'manage_products',
+    'manage_inventory',
+    'manage_warehouse',
+    'manage_serials',
+    'manage_warranty',
+    'manage_customers',
+    'manage_suppliers',
+    'manage_debt_aging',
+    'manage_employees',
+    'manage_cashflow',
+    'manage_approvals',
+    'view_reports',
+    'system_settings',
+    'view_cost_price',
+    'export_data',
+  ],
+  manager: [
+    'view_dashboard',
+    'pos_sales',
+    'manage_orders',
+    'manage_returns',
+    'cash_shift',
+    'manage_products',
+    'manage_inventory',
+    'manage_warehouse',
+    'manage_serials',
+    'manage_warranty',
+    'manage_customers',
+    'manage_suppliers',
+    'manage_debt_aging',
+    'manage_cashflow',
+    'manage_approvals',
+    'view_reports',
+    'view_cost_price',
+    'export_data',
+  ],
+  cashier: [
+    'pos_sales',
+    'manage_orders',
+    'manage_returns',
+    'cash_shift',
+    'manage_customers',
+    'manage_warranty',
+  ],
+  warehouse: [
+    'manage_products',
+    'manage_inventory',
+    'manage_warehouse',
+    'manage_serials',
+    'manage_suppliers',
+    'manage_returns',
+  ],
+  accountant: [
+    'view_dashboard',
+    'manage_orders',
+    'manage_customers',
+    'manage_suppliers',
+    'manage_debt_aging',
+    'manage_cashflow',
+    'manage_approvals',
+    'view_reports',
+    'view_cost_price',
+    'export_data',
+  ],
+};
+
+export const ROLE_CONFIG: Record<UserRole, {
+  label: string;
+  title: string;
+  badgeColor: string;
+  defaultView: string;
+  description: string;
+}> = {
+  admin: {
+    label: 'Quản Trị Viên (Admin)',
+    title: 'Tổng Quản Trị Hệ Thống',
+    badgeColor: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
+    defaultView: 'dashboard',
+    description: 'Toàn quyền điều hành, xem giá vốn, duyệt chi và cấu hình hệ thống',
+  },
+  manager: {
+    label: 'Cửa Hàng Trưởng (Manager)',
+    title: 'Cửa Hàng Trưởng / Quản Lý',
+    badgeColor: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30',
+    defaultView: 'dashboard',
+    description: 'Điều phối vận hành, duyệt vượt nợ, theo dõi doanh thu và kho hàng',
+  },
+  cashier: {
+    label: 'Thu Ngân (Cashier)',
+    title: 'Nhân Viên Thu Ngân POS',
+    badgeColor: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+    defaultView: 'pos',
+    description: 'Thực hiện bán hàng POS, nhận bảo hành và chốt ca tiền mặt',
+  },
+  warehouse: {
+    label: 'Thủ Kho (Warehouse)',
+    title: 'Thủ Kho & Vận Hành',
+    badgeColor: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
+    defaultView: 'inventory',
+    description: 'Quản lý xuất nhập tồn, lô hạn dùng FEFO và Serial/IMEI',
+  },
+  accountant: {
+    label: 'Kế Toán (Accountant)',
+    title: 'Kế Toán Trưởng & Công Nợ',
+    badgeColor: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30',
+    defaultView: 'cashflow',
+    description: 'Quản lý sổ quỹ thu chi, báo cáo tuổi nợ và hóa đơn doanh thu',
+  },
+};
+
 
 export type TierPriceType = 'retail' | 'wholesale' | 'vip';
 
@@ -28,6 +169,15 @@ export interface PackagingUnit {
   priceRetail: number;
   priceWholesale: number;
   priceVip: number;
+}
+
+export interface ProductCategory {
+  id: string;
+  name: string;
+  code?: string;
+  description?: string;
+  color?: string;
+  productCount?: number;
 }
 
 export interface ProductBatch {
@@ -437,3 +587,38 @@ export interface WarrantyTicket {
   serviceRecords: WarrantyServiceRecord[];
   notes?: string;
 }
+
+// 6. Quản lý Chat Nội Bộ (Internal Team Chat)
+export interface ChatAttachment {
+  type: 'order' | 'product' | 'image';
+  title: string;
+  code?: string;
+  url?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  channelId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: UserRole;
+  senderAvatar?: string;
+  content: string;
+  timestamp: string;
+  tag?: string;
+  attachments?: ChatAttachment[];
+  reactions?: Record<string, string[]>;
+}
+
+export interface ChatChannel {
+  id: string;
+  name: string;
+  description: string;
+  type: 'channel' | 'direct';
+  recipientId?: string;
+  recipientName?: string;
+  recipientRole?: UserRole;
+  recipientAvatar?: string;
+  isOnline?: boolean;
+}
+
