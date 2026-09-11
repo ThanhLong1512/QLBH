@@ -91,7 +91,7 @@ export async function GET() {
       countMap[pc.name] = (countMap[pc.name] || 0) + pc._count.id;
     });
 
-    const enriched = units.map(u => ({
+    const enriched = units.map((u: any) => ({
       ...u,
       productCount: countMap[u.name] || 0,
     }));

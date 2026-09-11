@@ -64,7 +64,7 @@ export async function GET() {
       countMap[pc.category] = pc._count.id;
     });
 
-    const enriched = categories.map(c => ({
+    const enriched = categories.map((c: any) => ({
       ...c,
       productCount: countMap[c.name] || 0,
     }));
